@@ -10,6 +10,10 @@ const currentTokens = ref<{ token: string; remainingTime: number }[]>([]);
 const isModalOpen = ref(false);
 const isQrScannerOpen = ref(false);
 const copiedName = ref<string | null>(null);
+// For editing account names
+const editingIndex = ref<number | null>(null);
+const editedName = ref<string>('');
+
 let intervalId: number | undefined;
 
 const loadAccounts = async () => {
@@ -97,7 +101,34 @@ const updateAllTokens = () => {
   
   // Update the reactive refs
   currentTokens.value = tokens;
+};
 
+// Functions for editing account names
+const startEditing = (index: number, currentName: string) => {
+  editingIndex.value = index;
+  editedName.value = currentName;
+};
+
+const saveEdit = async () => {
+  if (editingIndex.value !== null) {
+    // Validate the new name (e.g., not empty)
+    if (!editedName.value.trim()) {
+      alert('Account name cannot be empty.');
+      return;
+    }
+    
+    // Update the account name
+    accounts.value[editingIndex.value].name = editedName.value.trim();
+    await saveAccounts();
+    
+    // Exit editing mode
+    cancelEdit();
+  }
+};
+
+const cancelEdit = () => {
+  editingIndex.value = null;
+  editedName.value = '';
 };
 
 const copyToClipboard = async (name: string, text: string) => {
@@ -149,9 +180,37 @@ onUnmounted(() => {
     <div class="space-y-3">
       <h2 class="text-base font-semibold text-gray-400 mb-2">Your Accounts</h2>
       <p v-if="accounts.length === 0" class="text-gray-400 text-center py-4">No accounts added yet.</p>
-      <div v-for="account,index in accounts" :key="index+account.name+account.secret" class="bg-gray-800 p-3 rounded-lg shadow-md flex justify-between items-center">
+      <div v-for="(account, index) in accounts" :key="index+account.name+account.secret" class="bg-gray-800 p-3 rounded-lg shadow-md flex justify-between items-center">
         <div class="flex-grow">
-          <h3 class="text-base font-medium text-gray-200 text-left">{{ account.name }}</h3>
+          <!-- Edit mode -->
+          <div v-if="editingIndex === index" class="flex items-center gap-2">
+            <input 
+              v-model="editedName" 
+              type="text" 
+              class="flex-grow bg-gray-700 text-white px-2 py-1 rounded-md focus:outline-none focus:ring-2 focus:ring-gray-500"
+              @keyup.enter="saveEdit"
+              @keyup.esc="cancelEdit"
+            />
+            <button @click="saveEdit" class="p-1 text-green-500 rounded-full hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-green-400 transition-colors">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+              </svg>
+            </button>
+            <button @click="cancelEdit" class="p-1 text-gray-400 rounded-full hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-500 transition-colors">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+          <!-- View mode -->
+          <h3 v-else class="text-base font-medium text-gray-200 text-left flex items-center">
+            {{ account.name }}
+            <button @click="startEditing(index, account.name)" class="ml-2 p-1 text-gray-400 rounded-full hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-500 transition-colors">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+              </svg>
+            </button>
+          </h3>
           <div class="flex items-center gap-2 mt-2">
             <span class="text-2xl font-mono text-gray-300 tracking-wider">{{ currentTokens[index]?.token || '...' }}</span>
             <progress :value="currentTokens[index]?.remainingTime" max="30" class="w-full h-1.5 rounded-full overflow-hidden"></progress>
