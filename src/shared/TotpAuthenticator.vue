@@ -4,12 +4,9 @@ import AddAccountModal from '../components/AddAccountModal.vue';
 import QrScanner from '../components/QrScanner.vue';
 import { generateAllTokens, validateBase32Secret, type TotpAccounts } from '../lib/totp';
 
-// Using a dictionary-like object for accounts
-// Key: account name (string)
-// Value: account data (object with secret)
-const accounts = ref<TotpAccounts>({});
-const currentTokens = ref<{ [key: string]: string }>({});
-const remainingTimes = ref<{ [key: string]: number }>({});
+// Using an array of objects for accounts
+const accounts = ref<TotpAccounts>([]);
+const currentTokens = ref<{ token: string; remainingTime: number }[]>([]);
 const isModalOpen = ref(false);
 const isQrScannerOpen = ref(false);
 const copiedName = ref<string | null>(null);
@@ -18,8 +15,20 @@ let intervalId: number | undefined;
 const loadAccounts = async () => {
   try {
     const result = await chrome.storage.sync.get('totpAccounts');
-    // Use an empty object as default
-    accounts.value = result.totpAccounts || {};
+    let storedAccounts = result.totpAccounts;
+
+    // Data migration: if old object format is found, convert to array
+    if (storedAccounts && !Array.isArray(storedAccounts)) {
+      console.log('Migrating data from object to array format...');
+      storedAccounts = Object.entries(storedAccounts).map(([name, account]: [string, any]) => ({
+        name,
+        secret: account.secret,
+      }));
+      // Save the migrated data back
+      await chrome.storage.sync.set({ totpAccounts: storedAccounts });
+    }
+    
+    accounts.value = storedAccounts || [];
     updateAllTokens(); // Initial token generation after loading
   } catch (error) {
     console.error('Error loading accounts:', error);
@@ -29,17 +38,18 @@ const loadAccounts = async () => {
 const saveAccounts = async () => {
   try {
     console.log('Saving to storage:', accounts.value);
-    await chrome.storage.sync.set({ totpAccounts: accounts.value });
+    await chrome.storage.sync.set({ totpAccounts: accounts.value.map(item=>item) });
   } catch (error) {
     console.error('Error saving accounts:', error);
   }
 };
 
 const handleAccountAdded = async ({ name, secret }: { name: string; secret: string }) => {
-  if (accounts.value[name]) {
-    alert('Account with this name already exists.');
-    return;
-  }
+  // // Allow duplicate names, but not duplicate secrets
+  // if (accounts.value.find(acc => acc.secret === secret)) {
+  //   alert('Account with this secret already exists.');
+  //   return;
+  // }
 
   // Validate the secret before adding
   if (!validateBase32Secret(secret)) {
@@ -47,18 +57,19 @@ const handleAccountAdded = async ({ name, secret }: { name: string; secret: stri
     return;
   }
 
-  // Add new account by setting a new key-value pair
-  accounts.value[name] = { secret };
+  // Add new account to the array
+  accounts.value.push({ name, secret });
   await saveAccounts();
   updateAllTokens();
   isModalOpen.value = false;
 };
 
 const handleQrScanSuccess = async ({ name, secret }: { name: string; secret: string }) => {
-  if (accounts.value[name]) {
-    alert('Account with this name already exists.');
-    return;
-  }
+  // Allow duplicate names, but not duplicate secrets
+  // if (accounts.value.find(acc => acc.secret === secret)) {
+  //   alert('Account with this secret already exists.');
+  //   return;
+  // }
 
   // Validate the secret before adding
   if (!validateBase32Secret(secret)) {
@@ -66,19 +77,18 @@ const handleQrScanSuccess = async ({ name, secret }: { name: string; secret: str
     return;
   }
 
-  // Add new account by setting a new key-value pair
-  accounts.value[name] = { secret };
+  // Add new account to the array
+  accounts.value.push({ name, secret });
   await saveAccounts();
   updateAllTokens();
   isQrScannerOpen.value = false;
 };
 
-const deleteAccount = async (name: string) => {
-  // Deletion is simpler
-  delete accounts.value[name];
-  delete currentTokens.value[name];
-  delete remainingTimes.value[name];
-  await saveAccounts();
+const deleteAccount = async (index: number) => {
+    accounts.value = accounts.value.filter((_, i) => i !== index);
+    delete currentTokens.value[index];
+    await saveAccounts();
+    updateAllTokens();
 };
 
 const updateAllTokens = () => {
@@ -86,10 +96,8 @@ const updateAllTokens = () => {
   const tokens = generateAllTokens(accounts.value);
   
   // Update the reactive refs
-  for (const [name, tokenData] of Object.entries(tokens)) {
-    currentTokens.value[name] = tokenData.token;
-    remainingTimes.value[name] = tokenData.remainingTime;
-  }
+  currentTokens.value = tokens;
+
 };
 
 const copyToClipboard = async (name: string, text: string) => {
@@ -140,28 +148,28 @@ onUnmounted(() => {
 
     <div class="space-y-3">
       <h2 class="text-base font-semibold text-gray-400 mb-2">Your Accounts</h2>
-      <p v-if="Object.keys(accounts).length === 0" class="text-gray-400 text-center py-4">No accounts added yet.</p>
-      <div v-for="(_, name) in accounts" :key="name" class="bg-gray-800 p-3 rounded-lg shadow-md flex justify-between items-center">
+      <p v-if="accounts.length === 0" class="text-gray-400 text-center py-4">No accounts added yet.</p>
+      <div v-for="account,index in accounts" :key="index+account.name+account.secret" class="bg-gray-800 p-3 rounded-lg shadow-md flex justify-between items-center">
         <div class="flex-grow">
-          <h3 class="text-base font-medium text-gray-200 text-left">{{ name }}</h3>
+          <h3 class="text-base font-medium text-gray-200 text-left">{{ account.name }}</h3>
           <div class="flex items-center gap-2 mt-2">
-            <span class="text-2xl font-mono text-gray-300 tracking-wider">{{ currentTokens[String(name)] || '...' }}</span>
-            <progress :value="remainingTimes[String(name)]" max="30" class="w-full h-1.5 rounded-full overflow-hidden"></progress>
-            <span class="text-xs text-gray-400 w-8 text-right">{{ remainingTimes[String(name)] }}s</span>
+            <span class="text-2xl font-mono text-gray-300 tracking-wider">{{ currentTokens[index]?.token || '...' }}</span>
+            <progress :value="currentTokens[index]?.remainingTime" max="30" class="w-full h-1.5 rounded-full overflow-hidden"></progress>
+            <span class="text-xs text-gray-400 w-8 text-right">{{ currentTokens[index]?.remainingTime }}s</span>
           </div>
         </div>
         <div class="flex items-center gap-1 ml-3">
           <div class="relative">
-            <button @click="copyToClipboard(String(name), currentTokens[String(name)])" :disabled="!currentTokens[String(name)] || currentTokens[String(name)] === 'Error'" class="p-1 text-gray-400 rounded-full hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-500 transition-colors">
+            <button @click="copyToClipboard(account.name, currentTokens[index]?.token)" :disabled="!currentTokens[index]?.token || currentTokens[index]?.token === 'Error'" class="p-1 text-gray-400 rounded-full hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-500 transition-colors">
               <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
               </svg>
             </button>
-            <span v-if="copiedName === name" class="absolute -top-8 left-1/2 -translate-x-1/2 bg-black text-white text-xs rounded-md px-2 py-1">
+            <span v-if="copiedName === account.name" class="absolute -top-8 left-1/2 -translate-x-1/2 bg-black text-white text-xs rounded-md px-2 py-1">
               Copied!
             </span>
           </div>
-          <button @click="deleteAccount(String(name))" class="p-1 text-red-500 rounded-full hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-red-400 transition-colors">
+          <button @click="deleteAccount(index)" class="p-1 text-red-500 rounded-full hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-red-400 transition-colors">
             <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
             </svg>

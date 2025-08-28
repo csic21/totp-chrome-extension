@@ -1,4 +1,4 @@
-import { TOTP, Secret } from 'otpauth';
+import { TOTP, Secret } from "otpauth";
 
 export interface TotpAccount {
   name: string;
@@ -10,11 +10,7 @@ export interface TotpToken {
   remainingTime: number;
 }
 
-export interface TotpAccounts {
-  [key: string]: {
-    secret: string;
-  };
-}
+export type TotpAccounts = TotpAccount[];
 
 /**
  * Generate a TOTP token for a given account
@@ -28,7 +24,7 @@ export function generateTotpToken(
   secret: string,
   period: number = 30,
   digits: number = 6,
-  algorithm: string = 'SHA1'
+  algorithm: string = "SHA1"
 ): TotpToken {
   try {
     const totp = new TOTP({
@@ -37,15 +33,15 @@ export function generateTotpToken(
       period,
       algorithm,
     });
-    
+
     const now = Date.now();
     const token = totp.generate();
     const remainingTime = totp.period - (Math.floor(now / 1000) % totp.period);
-    
+
     return { token, remainingTime };
   } catch (error) {
-    console.error('Error generating TOTP token:', error);
-    return { token: 'Error', remainingTime: 0 };
+    console.error("Error generating TOTP token:", error);
+    return { token: "Error", remainingTime: 0 };
   }
 }
 
@@ -58,7 +54,7 @@ export function validateBase32Secret(secret: string): boolean {
   if (!secret || secret.length === 0) {
     return false;
   }
-  
+
   try {
     Secret.fromBase32(secret);
     return true;
@@ -70,32 +66,34 @@ export function validateBase32Secret(secret: string): boolean {
 /**
  * Generate tokens for all accounts
  * @param accounts The accounts to generate tokens for
- * @returns An object mapping account names to their tokens and remaining times
+ * @returns An object mapping account secrets to their tokens and remaining times
  */
-export function generateAllTokens(accounts: TotpAccounts): { 
-  [key: string]: TotpToken 
-} {
-  const tokens: { [key: string]: TotpToken } = {};
+export function generateAllTokens(accounts: TotpAccounts): TotpToken[] {
+  const tokens: TotpToken[] = [];
   const now = Date.now();
-  
-  for (const [name, account] of Object.entries(accounts)) {
+
+  for (const index in accounts) {
     try {
       const totp = new TOTP({
-        secret: Secret.fromBase32(account.secret),
+        secret: Secret.fromBase32(accounts[index].secret),
         digits: 6,
         period: 30,
-        algorithm: 'SHA1',
+        algorithm: "SHA1",
       });
-      
+
       const token = totp.generate();
-      const remainingTime = totp.period - (Math.floor(now / 1000) % totp.period);
-      
-      tokens[name] = { token, remainingTime };
+      const remainingTime =
+        totp.period - (Math.floor(now / 1000) % totp.period);
+
+      tokens[index] = { token, remainingTime };
     } catch (error) {
-      console.error(`Failed to generate token for ${name}:`, error);
-      tokens[name] = { token: 'Error', remainingTime: 0 };
+      console.error(
+        `Failed to generate token for ${accounts[index].name}:`,
+        error
+      );
+      tokens[index] = { token: "Error", remainingTime: 0 };
     }
   }
-  
+
   return tokens;
 }
