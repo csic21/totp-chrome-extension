@@ -63,6 +63,7 @@ const handleAccountAdded = async ({ name, secret }: { name: string; secret: stri
 
   // Add new account to the array
   accounts.value.push({ name, secret });
+  cancelEdit();
   await saveAccounts();
   updateAllTokens();
   isModalOpen.value = false;
@@ -82,15 +83,14 @@ const handleQrScanSuccess = async ({ name, secret }: { name: string; secret: str
   }
 
   // Add new account to the array
-  accounts.value.push({ name, secret });
-  await saveAccounts();
-  updateAllTokens();
+  handleAccountAdded({ name, secret });
   isQrScannerOpen.value = false;
 };
 
 const deleteAccount = async (index: number) => {
     accounts.value = accounts.value.filter((_, i) => i !== index);
     delete currentTokens.value[index];
+    cancelEdit()
     await saveAccounts();
     updateAllTokens();
 };
@@ -203,21 +203,23 @@ onUnmounted(() => {
             </button>
           </div>
           <!-- View mode -->
-          <h3 v-else class="text-base font-medium text-gray-200 text-left flex items-center">
-            {{ account.name }}
-            <button @click="startEditing(index, account.name)" class="ml-2 p-1 text-gray-400 rounded-full hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-500 transition-colors">
-              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-              </svg>
-            </button>
-          </h3>
-          <div class="flex items-center gap-2 mt-2">
-            <span class="text-2xl font-mono text-gray-300 tracking-wider">{{ currentTokens[index]?.token || '...' }}</span>
-            <progress :value="currentTokens[index]?.remainingTime" max="30" class="w-full h-1.5 rounded-full overflow-hidden"></progress>
-            <span class="text-xs text-gray-400 w-8 text-right">{{ currentTokens[index]?.remainingTime }}s</span>
+          <div v-else>
+            <h3 class="text-base font-medium text-gray-200 text-left flex items-center">
+              {{ account.name }}
+              <button @click="startEditing(index, account.name)" class="ml-2 p-1 text-gray-400 rounded-full hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-500 transition-colors">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                </svg>
+              </button>
+            </h3>
+            <div class="flex items-center gap-2 mt-2">
+              <span class="text-2xl font-mono text-gray-300 tracking-wider">{{ currentTokens[index]?.token || '...' }}</span>
+              <progress :value="currentTokens[index]?.remainingTime" max="30" class="w-full h-1.5 rounded-full overflow-hidden"></progress>
+              <span class="text-xs text-gray-400 w-8 text-right">{{ currentTokens[index]?.remainingTime }}s</span>
+            </div>
           </div>
         </div>
-        <div class="flex items-center gap-1 ml-3">
+        <div v-if="editingIndex !== index" class="flex items-center gap-1 ml-3">
           <div class="relative">
             <button @click="copyToClipboard(account.name, currentTokens[index]?.token)" :disabled="!currentTokens[index]?.token || currentTokens[index]?.token === 'Error'" class="p-1 text-gray-400 rounded-full hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-500 transition-colors">
               <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
