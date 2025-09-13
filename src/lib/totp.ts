@@ -3,6 +3,7 @@ import { TOTP, Secret } from "otpauth";
 export interface TotpAccount {
   name: string;
   secret: string;
+  activePath?: string;
 }
 
 export interface TotpToken {
