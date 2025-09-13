@@ -2,6 +2,7 @@
 import { ref, onMounted, onUnmounted } from 'vue';
 import AddAccountModal from '../components/AddAccountModal.vue';
 import QrScanner from '../components/QrScanner.vue';
+import AddMenu from '../components/AddMenu.vue';
 import { generateAllTokens, validateBase32Secret, type TotpAccounts } from '../lib/totp';
 
 // Using an array of objects for accounts
@@ -163,15 +164,9 @@ onUnmounted(() => {
 
 <template>
   <div class="w-full max-w-md bg-gray-900 p-4 font-sans text-white mx-auto rounded-xl min-h-[400px]">
-    <h1 class="text-center text-xl font-bold text-gray-200 mb-4">TOTP Authenticator</h1>
-
-    <div class="mb-4 flex gap-2">
-      <button @click="isModalOpen = true" class="flex-1 bg-gray-700 text-white py-2 rounded-md hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-opacity-50 transition-colors">
-        Add Account
-      </button>
-      <button @click="openQrScanner" class="flex-1 bg-gray-700 text-white py-2 rounded-md hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-opacity-50 transition-colors">
-        Scan QR Code
-      </button>
+    <div class="flex justify-between items-center mb-4">
+      <h1 class="text-xl font-bold text-gray-200">TOTP Authenticator</h1>
+      <AddMenu @add-account="isModalOpen = true" @scan-qr="openQrScanner" />
     </div>
 
     <AddAccountModal v-if="isModalOpen" @add-account="handleAccountAdded" @close="isModalOpen = false" />
