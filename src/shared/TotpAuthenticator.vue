@@ -14,7 +14,7 @@ const accounts = ref<TotpAccounts>([]);
 const currentTokens = ref<{ token: string; remainingTime: number }[]>([]);
 const isModalOpen = ref(false);
 const isQrScannerOpen = ref(false);
-const copiedName = ref<string | null>(null);
+const copiedIndex = ref<number | null>(null);
 // For editing account names
 const editingIndex = ref<number | null>(null);
 const editedName = ref<string>("");
@@ -185,13 +185,13 @@ const cancelEdit = () => {
   editedName.value = "";
 };
 
-const copyToClipboard = async (name: string, text: string) => {
+const copyToClipboard = async (index: number, text: string) => {
   if (!text || text === "Error") return;
   try {
     await navigator.clipboard.writeText(text);
-    copiedName.value = name;
+    copiedIndex.value = index;
     setTimeout(() => {
-      copiedName.value = null;
+      copiedIndex.value = null;
     }, 2000);
   } catch (err) {
     console.error("Failed to copy: ", err);
@@ -364,13 +364,6 @@ onUnmounted(() => {
                       />
                     </svg>
                   </button>
-
-                  <span
-                    v-if="copiedName === account.name"
-                    class="absolute -top-8 left-1/2 -translate-x-1/2 bg-black text-white text-xs rounded-md px-2 py-1"
-                  >
-                    Copied!
-                  </span>
                 </div>
                 <button
                   @click="deleteAccount(index)"
@@ -395,14 +388,12 @@ onUnmounted(() => {
             </div>
             <div class="flex items-center gap-2 mt-2">
               <button
-                @click="
-                  copyToClipboard(account.name, currentTokens[index]?.token)
-                "
+                @click="copyToClipboard(index, currentTokens[index]?.token)"
                 :disabled="
                   !currentTokens[index]?.token ||
                   currentTokens[index]?.token === 'Error'
                 "
-                class="p-1 text-gray-400 rounded-full hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-500 transition-colors"
+                class="relative p-1 text-gray-400 rounded-full hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-500 transition-colors"
               >
                 <svg
                   xmlns="http://www.w3.org/2000/svg"
@@ -418,7 +409,14 @@ onUnmounted(() => {
                     d="M15.75 17.25v3.375c0 .621-.504 1.125-1.125 1.125h-9.75a1.125 1.125 0 0 1-1.125-1.125V7.875c0-.621.504-1.125 1.125-1.125H6.75a9.06 9.06 0 0 1 1.5.124m7.5 10.376h3.375c.621 0 1.125-.504 1.125-1.125V11.25c0-4.46-3.243-8.161-7.5-8.876a9.06 9.06 0 0 0-1.5-.124H9.375c-.621 0-1.125.504-1.125 1.125v3.5m7.5 10.375H9.375a1.125 1.125 0 0 1-1.125-1.125v-9.25m12 6.625v-1.875a3.375 3.375 0 0 0-3.375-3.375h-1.5a1.125 1.125 0 0 1-1.125-1.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H9.75"
                   />
                 </svg>
+                <span
+                  v-if="copiedIndex === index"
+                  class="absolute -top-8 left-1/2 -translate-x-1/2 bg-black text-white text-xs rounded-md px-2 py-1"
+                >
+                  Copied!
+                </span>
               </button>
+
               <span class="text-2xl font-mono text-gray-300 tracking-wider">{{
                 currentTokens[index]?.token || "..."
               }}</span>
