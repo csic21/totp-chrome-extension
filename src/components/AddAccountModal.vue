@@ -36,8 +36,8 @@ const closeModal = () => {
       <input v-model="newAccountName" placeholder="Account Name" class="w-full px-3 py-2 mb-3 bg-gray-800 border border-gray-700 text-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-gray-500" />
       <input v-model="newAccountSecret" placeholder="Secret Key (Base32)" class="w-full px-3 py-2 mb-4 bg-gray-800 border border-gray-700 text-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-gray-500" />
       <div class="flex justify-end gap-3">
+        <button @click="addAccount" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-500 focus:outline-none focus:ring-2 focus:ring-gray-500 transition-colors">Add Account</button>
         <button @click="closeModal" class="px-4 py-2 bg-gray-700 text-gray-200 rounded-md hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-gray-500 transition-colors">Cancel</button>
-        <button @click="addAccount" class="px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-500 focus:outline-none focus:ring-2 focus:ring-gray-500 transition-colors">Add Account</button>
       </div>
     </div>
   </div>
