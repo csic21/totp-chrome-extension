@@ -11,6 +11,7 @@ A simple and clean Time-based One-Time Password (TOTP) authenticator browser ext
 - Copy codes to clipboard.
 - QR code scanning from image files or directly from the current webpage.
 - Edit account names.
+- Sort TOTP accounts by current domain.
 
 ## Development
 
