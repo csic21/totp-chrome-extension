@@ -39,26 +39,41 @@ const getCurrentTabHostname = async (): Promise<string | undefined> => {
   return undefined;
 };
 
+const sorterAccounts = () => {
+  accounts.value.sort((a, b) => {
+    const asort = a.activePath === currentHostname.value ? 0 : 1;
+    const bsort = b.activePath === currentHostname.value ? 0 : 1;
+    return asort - bsort;
+  });
+  updateAllTokens();
+};
+const getStorageAccounts = async () => {
+  const result = await chrome.storage.sync.get("totpAccounts");
+  let storedAccounts: TotpAccounts = result.totpAccounts;
+  // Data migration: if old object format is found, convert to array
+  if (storedAccounts && !Array.isArray(storedAccounts)) {
+    console.log("Migrating data from object to array format...");
+    storedAccounts = Object.entries(storedAccounts).map(
+      ([name, account]: [string, any]) => ({
+        name,
+        secret: account.secret,
+      })
+    );
+    // Save the migrated data back
+    await chrome.storage.sync.set({ totpAccounts: storedAccounts });
+  }
+
+  accounts.value =
+    storedAccounts?.map((item, index) => ({
+      ...item,
+      originIndex: index + 1,
+    })) || [];
+};
 const loadAccounts = async () => {
   try {
-    const result = await chrome.storage.sync.get("totpAccounts");
-    let storedAccounts = result.totpAccounts;
     currentHostname.value = await getCurrentTabHostname();
-    // Data migration: if old object format is found, convert to array
-    if (storedAccounts && !Array.isArray(storedAccounts)) {
-      console.log("Migrating data from object to array format...");
-      storedAccounts = Object.entries(storedAccounts).map(
-        ([name, account]: [string, any]) => ({
-          name,
-          secret: account.secret,
-        })
-      );
-      // Save the migrated data back
-      await chrome.storage.sync.set({ totpAccounts: storedAccounts });
-    }
-
-    accounts.value = storedAccounts || [];
-    updateAllTokens(); // Initial token generation after loading
+    await getStorageAccounts();
+    sorterAccounts();
   } catch (error) {
     console.error("Error loading accounts:", error);
   }
@@ -68,8 +83,20 @@ const saveAccounts = async () => {
   try {
     console.log("Saving to storage:", accounts.value);
     await chrome.storage.sync.set({
-      totpAccounts: accounts.value.map((item) => item),
+      totpAccounts: accounts.value
+        .sort((a, b) => {
+          const asort = a.originIndex ? a.originIndex : 999;
+          const bsort = b.originIndex ? b.originIndex : 999;
+          return asort - bsort;
+        })
+        .map((item) => ({
+          name: item.name,
+          secret: item.secret,
+          activePath: item.activePath,
+        })),
     });
+    await getStorageAccounts();
+    sorterAccounts();
   } catch (error) {
     console.error("Error saving accounts:", error);
   }
@@ -243,7 +270,7 @@ onUnmounted(() => {
       <div
         v-for="(account, index) in accounts"
         :key="index + account.name + account.secret"
-        class="bg-gray-800 p-3 rounded-lg shadow-md flex justify-between items-center"
+        class="bg-gray-800 px-3 py-2 rounded-lg shadow-md flex justify-between items-center"
       >
         <div class="flex-grow">
           <!-- Edit mode -->
@@ -265,7 +292,7 @@ onUnmounted(() => {
                 viewBox="0 0 24 24"
                 stroke-width="1.5"
                 stroke="currentColor"
-                class="size-5"
+                class="size-4"
               >
                 <path
                   stroke-linecap="round"
@@ -284,7 +311,7 @@ onUnmounted(() => {
                 viewBox="0 0 24 24"
                 stroke-width="1.5"
                 stroke="currentColor"
-                class="size-5"
+                class="size-4"
               >
                 <path
                   stroke-linecap="round"
@@ -298,8 +325,10 @@ onUnmounted(() => {
           <div v-else>
             <div class="flex items-center gap-1 justify-between">
               <button
+                v-if="account.activePath !== currentHostname"
                 @click="focusHostName(index)"
                 class="p-1 text-gray-400 rounded-full hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-500 transition-colors"
+                title="Pin the current domain name"
               >
                 <svg
                   xmlns="http://www.w3.org/2000/svg"
@@ -307,7 +336,7 @@ onUnmounted(() => {
                   viewBox="0 0 24 24"
                   stroke-width="1.5"
                   stroke="currentColor"
-                  class="size-5"
+                  class="size-4"
                 >
                   <path
                     stroke-linecap="round"
@@ -317,8 +346,10 @@ onUnmounted(() => {
                 </svg>
               </button>
               <button
+                v-else
                 @click="unFocusHostName(index)"
                 class="p-1 text-green-500 rounded-full hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-green-400 transition-colors"
+                title="Unpin the current domain name"
               >
                 <svg
                   xmlns="http://www.w3.org/2000/svg"
@@ -326,7 +357,7 @@ onUnmounted(() => {
                   viewBox="0 0 24 24"
                   stroke-width="1.5"
                   stroke="currentColor"
-                  class="size-5"
+                  class="size-4"
                 >
                   <path
                     stroke-linecap="round"
@@ -335,11 +366,11 @@ onUnmounted(() => {
                   />
                 </svg>
               </button>
-              <h3
-                class="w-0 text-base font-medium text-gray-200 overflow-hidden text-ellipsis flex-1 flex-nowrap text-nowrap"
+              <h4
+                class="w-0 text-base font-medium text-gray-200/80 overflow-hidden text-ellipsis flex-1 flex-nowrap text-nowrap"
               >
                 {{ account.name }}
-              </h3>
+              </h4>
               <div
                 v-if="editingIndex !== index"
                 class="flex items-center gap-1 ml-3"
@@ -348,6 +379,7 @@ onUnmounted(() => {
                   <button
                     @click="startEditing(index, account.name)"
                     class="ml-2 p-1 text-gray-400 rounded-full hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-500 transition-colors"
+                    title="Edit name"
                   >
                     <svg
                       xmlns="http://www.w3.org/2000/svg"
@@ -355,7 +387,7 @@ onUnmounted(() => {
                       viewBox="0 0 24 24"
                       stroke-width="1.5"
                       stroke="currentColor"
-                      class="size-5"
+                      class="size-4"
                     >
                       <path
                         stroke-linecap="round"
@@ -368,6 +400,7 @@ onUnmounted(() => {
                 <button
                   @click="deleteAccount(index)"
                   class="p-1 text-red-500 rounded-full hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-red-400 transition-colors"
+                  title="Delete account"
                 >
                   <svg
                     xmlns="http://www.w3.org/2000/svg"
@@ -375,7 +408,7 @@ onUnmounted(() => {
                     viewBox="0 0 24 24"
                     stroke-width="1.5"
                     stroke="currentColor"
-                    class="size-5"
+                    class="size-4"
                   >
                     <path
                       stroke-linecap="round"
@@ -386,7 +419,10 @@ onUnmounted(() => {
                 </button>
               </div>
             </div>
-            <div class="flex items-center gap-2 mt-2">
+            <span class="text-gray-400 text-xs" v-if="!!account.activePath">
+              Pin:{{ account.activePath }}
+            </span>
+            <div class="flex items-center gap-1">
               <button
                 @click="copyToClipboard(index, currentTokens[index]?.token)"
                 :disabled="
@@ -394,6 +430,7 @@ onUnmounted(() => {
                   currentTokens[index]?.token === 'Error'
                 "
                 class="relative p-1 text-gray-400 rounded-full hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-500 transition-colors"
+                title="Copy to clipboard"
               >
                 <svg
                   xmlns="http://www.w3.org/2000/svg"
@@ -401,7 +438,7 @@ onUnmounted(() => {
                   viewBox="0 0 24 24"
                   stroke-width="1.5"
                   stroke="currentColor"
-                  class="size-5"
+                  class="size-4"
                 >
                   <path
                     stroke-linecap="round"
@@ -417,7 +454,7 @@ onUnmounted(() => {
                 </span>
               </button>
 
-              <span class="text-2xl font-mono text-gray-300 tracking-wider">{{
+              <span class="text-xs font-mono text-gray-300/75 tracking-wider">{{
                 currentTokens[index]?.token || "..."
               }}</span>
               <progress

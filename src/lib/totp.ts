@@ -3,7 +3,11 @@ import { TOTP, Secret } from "otpauth";
 export interface TotpAccount {
   name: string;
   secret: string;
+  // init sort by active hostname
   activePath?: string;
+
+  // save accounts sort index
+  originIndex?: number;
 }
 
 export interface TotpToken {
