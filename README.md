@@ -12,6 +12,7 @@ A simple and clean Time-based One-Time Password (TOTP) authenticator browser ext
 - QR code scanning from image files or directly from the current webpage.
 - Edit account names.
 - Sort TOTP accounts by current domain.
+- Suport Google Authenticator migration.
 
 ## Development
 
