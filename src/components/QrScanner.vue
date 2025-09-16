@@ -138,7 +138,6 @@ const handleQrCodeResult = (data: string) => {
   try {
     // Parse TOTP URI format: otpauth://totp/Example:alice@google.com?secret=JBSWY3DPEHPK3PXP&issuer=Example
     const url = new URL(data);
-    console.log(url);
     if (url.protocol === "otpauth:" && url.hostname === "totp") {
       const issuerAndAccount = url.pathname.substring(1); // Remove leading "/"
       const params = new URLSearchParams(url.search);
