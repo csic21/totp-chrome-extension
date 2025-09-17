@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import TotpAuthenticator from '../shared/TotpAuthenticator.vue';
+import TotpAuthenticator from "../shared/TotpAuthenticator.vue";
 </script>
 
 <template>
-  <div class="w-80 bg-gray-900 rounded-xl overflow-hidden">
+  <div class="w-85 bg-gray-900 rounded-xl overflow-hidden">
     <TotpAuthenticator />
   </div>
 </template>

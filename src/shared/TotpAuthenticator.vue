@@ -3,6 +3,7 @@ import { ref, onMounted, onUnmounted } from "vue";
 import AddAccountModal from "../components/AddAccountModal.vue";
 import QrScanner from "../components/QrScanner.vue";
 import AddMenu from "../components/AddMenu.vue";
+import CircularProgress from "../components/CircularProgress.vue";
 import {
   generateAllTokens,
   validateBase32Secret,
@@ -324,53 +325,42 @@ onUnmounted(() => {
           <!-- View mode -->
           <div v-else>
             <div class="flex items-center gap-1 justify-between">
-              <button
-                v-if="account.activePath !== currentHostname"
-                @click="focusHostName(index)"
-                class="p-1 text-gray-400 rounded-full hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-500 transition-colors"
-                title="Pin the current domain name"
-              >
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke-width="1.5"
-                  stroke="currentColor"
-                  class="size-4"
+              <div class="flex items-center gap-1">
+                <button
+                  @click="copyToClipboard(index, currentTokens[index]?.token)"
+                  :disabled="
+                    !currentTokens[index]?.token ||
+                    currentTokens[index]?.token === 'Error'
+                  "
+                  class="relative text-gray-300 rounded-full hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-500 transition-colors"
+                  title="Copy to clipboard"
                 >
-                  <path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    d="M13.181 8.68a4.503 4.503 0 0 1 1.903 6.405m-9.768-2.782L3.56 14.06a4.5 4.5 0 0 0 6.364 6.365l3.129-3.129m5.614-5.615 1.757-1.757a4.5 4.5 0 0 0-6.364-6.365l-4.5 4.5c-.258.26-.479.541-.661.84m1.903 6.405a4.495 4.495 0 0 1-1.242-.88 4.483 4.483 0 0 1-1.062-1.683m6.587 2.345 5.907 5.907m-5.907-5.907L8.898 8.898M2.991 2.99 8.898 8.9"
-                  />
-                </svg>
-              </button>
-              <button
-                v-else
-                @click="unFocusHostName(index)"
-                class="p-1 text-green-500 rounded-full hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-green-400 transition-colors"
-                title="Unpin the current domain name"
-              >
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke-width="1.5"
-                  stroke="currentColor"
-                  class="size-4"
-                >
-                  <path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    d="M13.19 8.688a4.5 4.5 0 0 1 1.242 7.244l-4.5 4.5a4.5 4.5 0 0 1-6.364-6.364l1.757-1.757m13.35-.622 1.757-1.757a4.5 4.5 0 0 0-6.364-6.364l-4.5 4.5a4.5 4.5 0 0 0 1.242 7.244"
-                  />
-                </svg>
-              </button>
-              <h4
-                class="w-0 text-base font-medium text-gray-200/80 overflow-hidden text-ellipsis flex-1 flex-nowrap text-nowrap"
-              >
-                {{ account.name }}
-              </h4>
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke-width="1.5"
+                    stroke="currentColor"
+                    class="size-7"
+                  >
+                    <path
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      d="M15.75 17.25v3.375c0 .621-.504 1.125-1.125 1.125h-9.75a1.125 1.125 0 0 1-1.125-1.125V7.875c0-.621.504-1.125 1.125-1.125H6.75a9.06 9.06 0 0 1 1.5.124m7.5 10.376h3.375c.621 0 1.125-.504 1.125-1.125V11.25c0-4.46-3.243-8.161-7.5-8.876a9.06 9.06 0 0 0-1.5-.124H9.375c-.621 0-1.125.504-1.125 1.125v3.5m7.5 10.375H9.375a1.125 1.125 0 0 1-1.125-1.125v-9.25m12 6.625v-1.875a3.375 3.375 0 0 0-3.375-3.375h-1.5a1.125 1.125 0 0 1-1.125-1.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H9.75"
+                    />
+                  </svg>
+                  <span
+                    v-if="copiedIndex === index"
+                    class="absolute -top-8 left-1/2 -translate-x-1/2 bg-black text-white text-xs rounded-md px-2 py-1"
+                  >
+                    Copied!
+                  </span>
+                </button>
+
+                <h2 class="text-2xl font-mono text-gray-300 tracking-wider">
+                  {{ currentTokens[index]?.token || "..." }}
+                </h2>
+              </div>
               <div
                 v-if="editingIndex !== index"
                 class="flex items-center gap-1 ml-3"
@@ -417,54 +407,68 @@ onUnmounted(() => {
                     />
                   </svg>
                 </button>
+                <button
+                  v-if="account.activePath !== currentHostname"
+                  @click="focusHostName(index)"
+                  class="p-1 text-gray-400 rounded-full hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-500 transition-colors"
+                  title="Pin the current domain name"
+                >
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke-width="1.5"
+                    stroke="currentColor"
+                    class="size-4"
+                  >
+                    <path
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      d="M13.181 8.68a4.503 4.503 0 0 1 1.903 6.405m-9.768-2.782L3.56 14.06a4.5 4.5 0 0 0 6.364 6.365l3.129-3.129m5.614-5.615 1.757-1.757a4.5 4.5 0 0 0-6.364-6.365l-4.5 4.5c-.258.26-.479.541-.661.84m1.903 6.405a4.495 4.495 0 0 1-1.242-.88 4.483 4.483 0 0 1-1.062-1.683m6.587 2.345 5.907 5.907m-5.907-5.907L8.898 8.898M2.991 2.99 8.898 8.9"
+                    />
+                  </svg>
+                </button>
+                <button
+                  v-else
+                  @click="unFocusHostName(index)"
+                  class="p-1 text-green-500 rounded-full hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-green-400 transition-colors"
+                  title="Unpin the current domain name"
+                >
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke-width="1.5"
+                    stroke="currentColor"
+                    class="size-4"
+                  >
+                    <path
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      d="M13.19 8.688a4.5 4.5 0 0 1 1.242 7.244l-4.5 4.5a4.5 4.5 0 0 1-6.364-6.364l1.757-1.757m13.35-.622 1.757-1.757a4.5 4.5 0 0 0-6.364-6.364l-4.5 4.5a4.5 4.5 0 0 0 1.242 7.244"
+                    />
+                  </svg>
+                </button>
               </div>
             </div>
-            <span class="text-gray-400 text-xs" v-if="!!account.activePath">
-              Pin:{{ account.activePath }}
-            </span>
-            <div class="flex items-center gap-1">
-              <button
-                @click="copyToClipboard(index, currentTokens[index]?.token)"
-                :disabled="
-                  !currentTokens[index]?.token ||
-                  currentTokens[index]?.token === 'Error'
-                "
-                class="relative p-1 text-gray-400 rounded-full hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-500 transition-colors"
-                title="Copy to clipboard"
+            <div class="flex items-end gap-1 justify-between">
+              <h4
+                class="w-0 text-sm font-medium text-gray-400 overflow-hidden text-ellipsis flex-1 flex-nowrap text-nowrap"
               >
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke-width="1.5"
-                  stroke="currentColor"
-                  class="size-4"
-                >
-                  <path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    d="M15.75 17.25v3.375c0 .621-.504 1.125-1.125 1.125h-9.75a1.125 1.125 0 0 1-1.125-1.125V7.875c0-.621.504-1.125 1.125-1.125H6.75a9.06 9.06 0 0 1 1.5.124m7.5 10.376h3.375c.621 0 1.125-.504 1.125-1.125V11.25c0-4.46-3.243-8.161-7.5-8.876a9.06 9.06 0 0 0-1.5-.124H9.375c-.621 0-1.125.504-1.125 1.125v3.5m7.5 10.375H9.375a1.125 1.125 0 0 1-1.125-1.125v-9.25m12 6.625v-1.875a3.375 3.375 0 0 0-3.375-3.375h-1.5a1.125 1.125 0 0 1-1.125-1.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H9.75"
-                  />
-                </svg>
-                <span
-                  v-if="copiedIndex === index"
-                  class="absolute -top-8 left-1/2 -translate-x-1/2 bg-black text-white text-xs rounded-md px-2 py-1"
-                >
-                  Copied!
+                <span>
+                  {{ account.name }}
                 </span>
-              </button>
-
-              <span class="text-xs font-mono text-gray-300/75 tracking-wider">{{
-                currentTokens[index]?.token || "..."
-              }}</span>
-              <progress
-                :value="currentTokens[index]?.remainingTime"
-                max="30"
-                class="w-full h-1.5 rounded-full overflow-hidden"
-              ></progress>
-              <span class="text-xs text-gray-400 w-8 text-right"
-                >{{ currentTokens[index]?.remainingTime }}s</span
-              >
+                <div
+                  class="text-gray-500 text-xs overflow-hidden text-ellipsis"
+                  v-if="!!account.activePath"
+                >
+                  Pin:
+                  {{ account.activePath }}
+                </div>
+              </h4>
+              <CircularProgress
+                :remaining-time="currentTokens[index]?.remainingTime"
+              />
             </div>
           </div>
         </div>
@@ -475,16 +479,4 @@ onUnmounted(() => {
 
 <style>
 /* Using Tailwind CSS classes, so no scoped styles are needed here */
-progress::-webkit-progress-bar {
-  background-color: #757575; /* gray-600 */
-}
-
-progress::-webkit-progress-value {
-  background-color: #9e9e9e; /* gray-500 */
-  transition: width 0.2s ease;
-}
-
-progress::-moz-progress-bar {
-  background-color: #9e9e9e; /* gray-500 */
-}
 </style>
