@@ -332,7 +332,7 @@ onUnmounted(() => {
                     !currentTokens[index]?.token ||
                     currentTokens[index]?.token === 'Error'
                   "
-                  class="relative text-gray-300 rounded-full hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-500 transition-colors"
+                  class="relative p-1 text-gray-300 rounded-full hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-500 transition-colors"
                   title="Copy to clipboard"
                 >
                   <svg
