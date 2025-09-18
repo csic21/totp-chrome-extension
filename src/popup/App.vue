@@ -3,7 +3,7 @@ import TotpAuthenticator from "../shared/TotpAuthenticator.vue";
 </script>
 
 <template>
-  <div class="w-85 bg-gray-900 rounded-xl overflow-hidden">
+  <div class="w-85 overflow-hidden shadow-embossed">
     <TotpAuthenticator />
   </div>
 </template>
@@ -13,6 +13,5 @@ import TotpAuthenticator from "../shared/TotpAuthenticator.vue";
 body {
   margin: 0;
   padding: 0;
-  background-color: #212121; /* gray-900 to match the component background */
 }
 </style>

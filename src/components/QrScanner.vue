@@ -1,15 +1,33 @@
 <script setup lang="ts">
-import { ref } from "vue";
+import { ref, computed } from "vue";
 import jsQR from "jsqr";
 import base32Encode from "base32-encode";
 import { MigrationPayload } from "../lib/google-migration";
+
+const props = defineProps({
+  isDarkMode: {
+    type: Boolean,
+    default: false
+  }
+});
+
 const emit = defineEmits(["scan-success", "close"]);
 const fileInput = ref<HTMLInputElement | null>(null);
 const errorMessage = ref("");
 const isProcessing = ref(false);
 
+// Theme classes
+const backgroundColor = computed(() => props.isDarkMode ? 'bg-gray-900' : 'bg-white');
+const textColor = computed(() => props.isDarkMode ? 'text-gray-200' : 'text-gray-700');
+const borderColor = computed(() => props.isDarkMode ? 'border-gray-700' : 'border-gray-300');
+const hoverBorderColor = computed(() => props.isDarkMode ? 'hover:border-gray-600' : 'hover:border-gray-400');
+const processingSpinnerColor = computed(() => props.isDarkMode ? 'border-gray-300' : 'border-gray-700');
+const errorMessageColor = computed(() => props.isDarkMode ? 'text-red-400' : 'text-red-500');
+const infoTextColor = computed(() => props.isDarkMode ? 'text-gray-400' : 'text-gray-600');
+const cancelButtonColor = computed(() => props.isDarkMode ? 'bg-gray-700 text-gray-200 hover:bg-gray-600 focus:ring-gray-500' : 'bg-gray-200 text-gray-700 hover:bg-gray-300 focus:ring-gray-500');
+
 // Trigger file selection
-const triggerFileSelect = () => {
+function triggerFileSelect() {
   if (fileInput.value) {
     fileInput.value.click();
   }
@@ -188,20 +206,21 @@ const closeScanner = () => {
 
 <template>
   <div
-    class="fixed inset-0 bg-gray-900 bg-opacity-75 flex items-center justify-center z-50 p-4"
+    :class="['fixed inset-0 flex items-center justify-center z-50 p-4', { 'bg-gray-900 bg-opacity-75': isDarkMode, 'bg-gray-500 bg-opacity-75': !isDarkMode }]"
   >
-    <div class="bg-gray-800 p-6 rounded-lg shadow-xl w-full max-w-sm">
-      <h2 class="text-xl font-bold text-gray-200 mb-4">Scan QR Code</h2>
+    <div :class="['p-6 rounded-lg w-full max-w-sm shadow-embossed-strong', backgroundColor, textColor]">
+      <h2 :class="['text-xl font-bold mb-4', textColor]">Scan QR Code</h2>
 
       <div class="mb-4">
         <div
           @click="triggerFileSelect"
-          class="border-2 border-dashed border-gray-600 rounded-lg p-6 text-center cursor-pointer hover:border-gray-500 transition-colors mb-3"
+          :class="['border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-colors mb-3 shadow-embossed-light', borderColor, hoverBorderColor]"
         >
           <div class="flex flex-col items-center justify-center">
             <svg
               xmlns="http://www.w3.org/2000/svg"
-              class="h-10 w-10 text-gray-500 mb-2"
+              class="h-10 w-10 mb-2"
+              :class="infoTextColor"
               fill="none"
               viewBox="0 0 24 24"
               stroke="currentColor"
@@ -213,8 +232,8 @@ const closeScanner = () => {
                 d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
               />
             </svg>
-            <p class="text-gray-400 mb-1">Click to select QR code image</p>
-            <p class="text-gray-500 text-sm">Supports JPG, PNG, GIF formats</p>
+            <p :class="['mb-1', infoTextColor]">Click to select QR code image</p>
+            <p :class="['text-sm', { 'text-gray-500': !isDarkMode, 'text-gray-400': isDarkMode }]">Supports JPG, PNG, GIF formats</p>
           </div>
         </div>
 
@@ -229,16 +248,17 @@ const closeScanner = () => {
 
       <div v-if="isProcessing" class="text-center mb-4">
         <div
-          class="inline-block animate-spin rounded-full h-6 w-6 border-b-2 border-gray-300"
+          class="inline-block animate-spin rounded-full h-6 w-6 border-b-2"
+          :class="processingSpinnerColor"
         ></div>
-        <p class="text-gray-400 mt-2">Processing...</p>
+        <p :class="['mt-2', infoTextColor]">Processing...</p>
       </div>
 
-      <div v-if="errorMessage" class="text-red-400 text-center mb-4">
+      <div v-if="errorMessage" :class="['text-center mb-4', errorMessageColor]">
         {{ errorMessage }}
       </div>
 
-      <div class="text-gray-400 text-sm text-center mb-4">
+      <div :class="['text-sm text-center mb-4', infoTextColor]">
         Select an image file or scan the current page for a TOTP QR code
       </div>
 
@@ -246,13 +266,13 @@ const closeScanner = () => {
         <button
           @click="scanCurrentTab"
           :disabled="isProcessing"
-          class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors flex-1 disabled:opacity-50"
+          class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors flex-1 disabled:opacity-50 shadow-embossed"
         >
           Scan Page
         </button>
         <button
           @click="closeScanner"
-          class="px-4 py-2 bg-gray-700 text-gray-200 rounded-md hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-gray-500 transition-colors flex-1"
+          :class="['px-4 py-2 rounded-md focus:outline-none focus:ring-2 transition-colors flex-1 shadow-embossed-light', cancelButtonColor]"
         >
           Cancel
         </button>

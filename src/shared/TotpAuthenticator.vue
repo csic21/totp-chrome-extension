@@ -21,6 +21,27 @@ const editingIndex = ref<number | null>(null);
 const editedName = ref<string>("");
 const currentHostname = ref<string | undefined>();
 
+// Theme management
+const isDarkMode = ref(false);
+
+const toggleTheme = () => {
+  isDarkMode.value = !isDarkMode.value;
+  document.documentElement.classList.toggle("dark", isDarkMode.value);
+  localStorage.setItem("theme", isDarkMode.value ? "dark" : "light");
+};
+
+// Apply theme on component mount
+onMounted(() => {
+  const savedTheme = localStorage.getItem("theme");
+  if (savedTheme) {
+    isDarkMode.value = savedTheme === "dark";
+  } else {
+    // Default to light mode
+    isDarkMode.value = false;
+  }
+  document.documentElement.classList.toggle("dark", isDarkMode.value);
+});
+
 let intervalId: number | undefined;
 
 const getCurrentTabHostname = async (): Promise<string | undefined> => {
@@ -245,33 +266,107 @@ onUnmounted(() => {
 
 <template>
   <div
-    class="w-full max-w-md bg-gray-900 p-4 font-sans text-white mx-auto rounded-xl min-h-[400px]"
+    :class="[
+      'w-full max-w-md p-4 font-sans mx-auto min-h-[400px] shadow-embossed',
+      {
+        'bg-gray-100 text-gray-800': !isDarkMode,
+        'bg-gray-900 text-white': isDarkMode,
+      },
+    ]"
   >
     <div class="flex justify-between items-center mb-4">
-      <h1 class="text-xl font-bold text-gray-200">TOTP Authenticator</h1>
-      <AddMenu @add-account="isModalOpen = true" @scan-qr="openQrScanner" />
+      <h1
+        :class="[
+          'text-xl font-bold',
+          { 'text-gray-700': !isDarkMode, 'text-gray-200': isDarkMode },
+        ]"
+      >
+        TOTP Authenticator
+      </h1>
+      <div class="flex items-center gap-2">
+        <button
+          @click="toggleTheme"
+          :class="[
+            'p-1 rounded-full focus:outline-none focus:ring-2 transition-colors shadow-embossed-light',
+            {
+              'text-gray-700 hover:bg-gray-200 focus:ring-gray-300':
+                !isDarkMode,
+              'text-gray-300 hover:bg-gray-700 focus:ring-gray-500': isDarkMode,
+            },
+          ]"
+          title="Toggle theme"
+        >
+          <svg
+            v-if="isDarkMode"
+            xmlns="http://www.w3.org/2000/svg"
+            class="h-5 w-5"
+            viewBox="0 0 20 20"
+            fill="currentColor"
+          >
+            <path
+              d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z"
+            />
+          </svg>
+          <svg
+            v-else
+            xmlns="http://www.w3.org/2000/svg"
+            class="h-5 w-5"
+            viewBox="0 0 20 20"
+            fill="currentColor"
+          >
+            <path
+              fill-rule="evenodd"
+              d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0zm-.464 4.95l.707.707a1 1 0 001.414-1.414l-.707-.707a1 1 0 00-1.414 1.414zm2.12-10.607a1 1 0 010 1.414l-.706.707a1 1 0 11-1.414-1.414l.707-.707a1 1 0 011.414 0zM17 11a1 1 0 100-2h-1a1 1 0 100 2h1zm-7 4a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zM5.05 6.464A1 1 0 106.465 5.05l-.708-.707a1 1 0 00-1.414 1.414l.707.707zm1.414 8.486l-.707.707a1 1 0 01-1.414-1.414l.707-.707a1 1 0 011.414 1.414zM4 11a1 1 0 100-2H3a1 1 0 000 2h1z"
+              clip-rule="evenodd"
+            />
+          </svg>
+        </button>
+        <AddMenu
+          @add-account="isModalOpen = true"
+          @scan-qr="openQrScanner"
+          :is-dark-mode="isDarkMode"
+        />
+      </div>
     </div>
 
     <AddAccountModal
       v-if="isModalOpen"
       @add-account="handleAccountAdded"
       @close="isModalOpen = false"
+      :is-dark-mode="isDarkMode"
     />
     <QrScanner
       v-if="isQrScannerOpen"
       @scan-success="handleQrScanSuccess"
       @close="isQrScannerOpen = false"
+      :is-dark-mode="isDarkMode"
     />
 
     <div class="space-y-3">
-      <h2 class="text-base font-semibold text-gray-400 mb-2">Your Accounts</h2>
-      <p v-if="accounts.length === 0" class="text-gray-400 text-center py-4">
+      <h2
+        :class="[
+          'text-base font-semibold mb-2',
+          { 'text-gray-600': !isDarkMode, 'text-gray-400': isDarkMode },
+        ]"
+      >
+        Your Accounts
+      </h2>
+      <p
+        :class="[
+          'text-center py-4',
+          { 'text-gray-500': !isDarkMode, 'text-gray-400': isDarkMode },
+        ]"
+        v-if="accounts.length === 0"
+      >
         No accounts added yet.
       </p>
       <div
         v-for="(account, index) in accounts"
         :key="index + account.name + account.secret"
-        class="bg-gray-800 px-3 py-2 rounded-lg shadow-md flex justify-between items-center"
+        :class="[
+          'px-3 py-2 rounded-lg flex justify-between items-center shadow-embossed-light',
+          { 'bg-white': !isDarkMode, 'bg-gray-800': isDarkMode },
+        ]"
       >
         <div class="flex-grow">
           <!-- Edit mode -->
@@ -279,13 +374,27 @@ onUnmounted(() => {
             <input
               v-model="editedName"
               type="text"
-              class="flex-grow bg-gray-700 text-white px-2 py-1 rounded-md focus:outline-none focus:ring-2 focus:ring-gray-500"
+              :class="[
+                'flex-grow px-2 py-1 rounded-md focus:outline-none focus:ring-2 transition-colors shadow-embossed-light',
+                {
+                  'bg-gray-100 text-gray-800 focus:ring-gray-500': !isDarkMode,
+                  'bg-gray-700 text-white focus:ring-gray-500': isDarkMode,
+                },
+              ]"
               @keyup.enter="saveEdit"
               @keyup.esc="cancelEdit"
             />
             <button
               @click="saveEdit"
-              class="p-1 text-green-500 rounded-full hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-green-400 transition-colors"
+              :class="[
+                'p-1 rounded-full focus:outline-none transition-colors shadow-embossed-light',
+                {
+                  'text-green-600 hover:bg-gray-100 focus:ring-green-300':
+                    !isDarkMode,
+                  'text-green-500 hover:bg-gray-700 focus:ring-green-400':
+                    isDarkMode,
+                },
+              ]"
             >
               <svg
                 xmlns="http://www.w3.org/2000/svg"
@@ -304,7 +413,15 @@ onUnmounted(() => {
             </button>
             <button
               @click="cancelEdit"
-              class="p-1 text-gray-400 rounded-full hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-500 transition-colors"
+              :class="[
+                'p-1 rounded-full focus:outline-none transition-colors shadow-embossed-light',
+                {
+                  'text-gray-500 hover:bg-gray-100 focus:ring-gray-300':
+                    !isDarkMode,
+                  'text-gray-400 hover:bg-gray-700 focus:ring-gray-500':
+                    isDarkMode,
+                },
+              ]"
             >
               <svg
                 xmlns="http://www.w3.org/2000/svg"
@@ -332,7 +449,15 @@ onUnmounted(() => {
                     !currentTokens[index]?.token ||
                     currentTokens[index]?.token === 'Error'
                   "
-                  class="relative p-1 text-gray-300 rounded-full hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-500 transition-colors"
+                  :class="[
+                    'relative p-1 rounded-full focus:outline-none transition-colors shadow-embossed-light',
+                    {
+                      'text-gray-600 hover:bg-gray-100 focus:ring-gray-300':
+                        !isDarkMode,
+                      'text-gray-300 hover:bg-gray-700 focus:ring-gray-500':
+                        isDarkMode,
+                    },
+                  ]"
                   title="Copy to clipboard"
                 >
                   <svg
@@ -357,7 +482,15 @@ onUnmounted(() => {
                   </span>
                 </button>
 
-                <h2 class="text-2xl font-mono text-gray-300 tracking-wider">
+                <h2
+                  :class="[
+                    'text-2xl font-mono tracking-wider',
+                    {
+                      'text-gray-700': !isDarkMode,
+                      'text-gray-300': isDarkMode,
+                    },
+                  ]"
+                >
                   {{ currentTokens[index]?.token || "..." }}
                 </h2>
               </div>
@@ -368,7 +501,15 @@ onUnmounted(() => {
                 <div class="relative">
                   <button
                     @click="startEditing(index, account.name)"
-                    class="ml-2 p-1 text-gray-400 rounded-full hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-500 transition-colors"
+                    :class="[
+                      'ml-2 p-1 rounded-full focus:outline-none transition-colors shadow-embossed-light',
+                      {
+                        'text-gray-500 hover:bg-gray-100 focus:ring-gray-300':
+                          !isDarkMode,
+                        'text-gray-400 hover:bg-gray-700 focus:ring-gray-500':
+                          isDarkMode,
+                      },
+                    ]"
                     title="Edit name"
                   >
                     <svg
@@ -389,7 +530,15 @@ onUnmounted(() => {
                 </div>
                 <button
                   @click="deleteAccount(index)"
-                  class="p-1 text-red-500 rounded-full hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-red-400 transition-colors"
+                  :class="[
+                    'p-1 rounded-full focus:outline-none transition-colors shadow-embossed-light',
+                    {
+                      'text-red-500 hover:bg-gray-100 focus:ring-red-300':
+                        !isDarkMode,
+                      'text-red-500 hover:bg-gray-700 focus:ring-red-400':
+                        isDarkMode,
+                    },
+                  ]"
                   title="Delete account"
                 >
                   <svg
@@ -410,7 +559,15 @@ onUnmounted(() => {
                 <button
                   v-if="account.activePath !== currentHostname"
                   @click="focusHostName(index)"
-                  class="p-1 text-gray-400 rounded-full hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-500 transition-colors"
+                  :class="[
+                    'p-1 rounded-full focus:outline-none transition-colors shadow-embossed-light',
+                    {
+                      'text-gray-500 hover:bg-gray-100 focus:ring-gray-300':
+                        !isDarkMode,
+                      'text-gray-400 hover:bg-gray-700 focus:ring-gray-500':
+                        isDarkMode,
+                    },
+                  ]"
                   title="Pin the current domain name"
                 >
                   <svg
@@ -431,7 +588,15 @@ onUnmounted(() => {
                 <button
                   v-else
                   @click="unFocusHostName(index)"
-                  class="p-1 text-green-500 rounded-full hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-green-400 transition-colors"
+                  :class="[
+                    'p-1 rounded-full focus:outline-none transition-colors shadow-embossed-light',
+                    {
+                      'text-green-600 hover:bg-gray-100 focus:ring-green-300':
+                        !isDarkMode,
+                      'text-green-500 hover:bg-gray-700 focus:ring-green-400':
+                        isDarkMode,
+                    },
+                  ]"
                   title="Unpin the current domain name"
                 >
                   <svg
@@ -453,13 +618,22 @@ onUnmounted(() => {
             </div>
             <div class="flex items-end gap-1 justify-between">
               <h4
-                class="w-0 text-sm font-medium text-gray-400 overflow-hidden text-ellipsis flex-1 flex-nowrap text-nowrap"
+                :class="[
+                  'w-0 text-sm font-medium overflow-hidden text-ellipsis flex-1 flex-nowrap text-nowrap',
+                  { 'text-gray-600': !isDarkMode, 'text-gray-400': isDarkMode },
+                ]"
               >
                 <span>
                   {{ account.name }}
                 </span>
                 <div
-                  class="text-gray-500 text-xs overflow-hidden text-ellipsis"
+                  :class="[
+                    'text-xs overflow-hidden text-ellipsis',
+                    {
+                      'text-gray-500': !isDarkMode,
+                      'text-gray-400': isDarkMode,
+                    },
+                  ]"
                   v-if="!!account.activePath"
                 >
                   Pin:
