@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "TOTP Authenticator",
   "version": "1.0.7",
-  "description": "A simple TOTP generator extension.",
+  "description": "A simple TOTP authenticator extension.",
   "permissions": [
     "storage",
     "sidePanel",
