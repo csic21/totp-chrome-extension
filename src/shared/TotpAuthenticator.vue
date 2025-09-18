@@ -22,24 +22,11 @@ const editedName = ref<string>("");
 const currentHostname = ref<string | undefined>();
 
 // Theme management
-const isDarkMode = ref(false);
-
-const toggleTheme = () => {
-  isDarkMode.value = !isDarkMode.value;
-  document.documentElement.classList.toggle("dark", isDarkMode.value);
-  localStorage.setItem("theme", isDarkMode.value ? "dark" : "light");
-};
+import { isDarkMode, toggleTheme, applyTheme } from '../composables/useTheme';
 
 // Apply theme on component mount
 onMounted(() => {
-  const savedTheme = localStorage.getItem("theme");
-  if (savedTheme) {
-    isDarkMode.value = savedTheme === "dark";
-  } else {
-    // Default to light mode
-    isDarkMode.value = false;
-  }
-  document.documentElement.classList.toggle("dark", isDarkMode.value);
+  applyTheme();
 });
 
 let intervalId: number | undefined;
