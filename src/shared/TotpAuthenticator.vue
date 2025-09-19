@@ -646,7 +646,7 @@ onUnmounted(() => {
                 </button>
               </div>
             </div>
-            <div class="flex items-end gap-1 justify-between">
+            <div class="flex items-end gap-1 justify-between pl-1 pr-1">
               <h4
                 :class="[
                   'w-0 text-sm font-medium overflow-hidden text-ellipsis flex-1 flex-nowrap text-nowrap',
