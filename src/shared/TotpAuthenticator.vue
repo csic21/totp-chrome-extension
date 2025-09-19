@@ -22,7 +22,13 @@ const editedName = ref<string>("");
 const currentHostname = ref<string | undefined>();
 
 // Theme management
-import { isDarkMode, toggleTheme, applyTheme } from '../composables/useTheme';
+import {
+  isDarkMode,
+  isAutoMode,
+  toggleTheme,
+  toggleAutoMode,
+  applyTheme,
+} from "../composables/useTheme";
 
 // Apply theme on component mount
 onMounted(() => {
@@ -261,7 +267,7 @@ onUnmounted(() => {
       },
     ]"
   >
-    <div class="flex justify-between items-center mb-4">
+    <div class="flex justify-between items-start mb-4">
       <h1
         :class="[
           'text-xl font-bold',
@@ -271,6 +277,42 @@ onUnmounted(() => {
         TOTP Authenticator
       </h1>
       <div class="flex items-center gap-2">
+        <!-- Auto Mode Switch -->
+        <div class="flex items-center gap-1">
+          <span
+            :class="[
+              'text-sm',
+              { 'text-gray-700': !isDarkMode, 'text-gray-300': isDarkMode },
+            ]"
+          >
+            Auto
+          </span>
+          <button
+            @click="toggleAutoMode"
+            :class="[
+              'relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-offset-1',
+              {
+                'bg-gray-600 focus:ring-gray-300': isAutoMode && !isDarkMode,
+                'bg-gray-500 focus:ring-gray-500': isAutoMode && isDarkMode,
+                'bg-gray-200': !isAutoMode && !isDarkMode,
+                'bg-gray-600': !isAutoMode && isDarkMode,
+              },
+            ]"
+            title="Toggle auto theme (follow system)"
+          >
+            <span
+              :class="[
+                'inline-block h-3 w-3 transform rounded-full bg-white transition-transform',
+                {
+                  'translate-x-5': isAutoMode,
+                  'translate-x-1': !isAutoMode,
+                },
+              ]"
+            />
+          </button>
+        </div>
+
+        <!-- Theme Toggle Button -->
         <button
           @click="toggleTheme"
           :class="[
@@ -281,7 +323,7 @@ onUnmounted(() => {
               'text-gray-300 hover:bg-gray-700 focus:ring-gray-500': isDarkMode,
             },
           ]"
-          title="Toggle theme"
+          title="Toggle dark mode"
         >
           <svg
             v-if="isDarkMode"
@@ -308,6 +350,7 @@ onUnmounted(() => {
             />
           </svg>
         </button>
+
         <AddMenu
           @add-account="isModalOpen = true"
           @scan-qr="openQrScanner"
