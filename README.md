@@ -32,7 +32,3 @@ pnpm run dev
 # Build the extension
 pnpm run build
 ```
-
-## Star History
-
-[![Star History Chart](https://api.star-history.com/svg?repos=totp-chrome-extension/totp-chrome-extension&type=Date)](https://www.star-history.com/#totp-chrome-extension/totp-chrome-extension&Date)
