@@ -394,9 +394,7 @@ onUnmounted(() => {
       @close="isQrScannerOpen = false"
       :is-dark-mode="isDarkMode"
     />
-
-    <div class="space-y-3">
-      <div class="flex justify-between items-start">
+ <div class="flex justify-between items-start">
         <h2
           :class="[
             'text-base font-semibold mb-2',
@@ -429,6 +427,8 @@ onUnmounted(() => {
           </svg>
         </button>
       </div>
+    <div class="space-y-3">
+     
       <p
         :class="[
           'text-center py-4',
