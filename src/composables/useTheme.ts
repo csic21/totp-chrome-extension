@@ -1,4 +1,4 @@
-import { ref, onMounted, onUnmounted } from "vue";
+import { ref } from "vue";
 
 const isDarkMode = ref(false);
 const isAutoMode = ref(false);
@@ -36,11 +36,6 @@ const toggleTheme = () => {
   isDarkMode.value = !isDarkMode.value;
   document.documentElement.classList.toggle("dark", isDarkMode.value);
   localStorage.setItem("theme", isDarkMode.value ? "dark" : "light");
-
-  // Dispatch custom event so other parts of the app can react to theme changes
-  window.dispatchEvent(
-    new CustomEvent("theme-change", { detail: isDarkMode.value })
-  );
 };
 
 // Toggle auto mode
@@ -52,18 +47,6 @@ const toggleAutoMode = () => {
     // When enabling auto mode, apply system preference immediately
     applyTheme();
   }
-
-  // Dispatch custom event so other parts of the app can react to auto mode changes
-  window.dispatchEvent(
-    new CustomEvent("auto-mode-change", { detail: isAutoMode.value })
-  );
-};
-
-// Listen for theme changes from other parts of the app
-const handleThemeChange = (e: Event) => {
-  const event = e as CustomEvent;
-  isDarkMode.value = event.detail;
-  document.documentElement.classList.toggle("dark", isDarkMode.value);
 };
 
 // Listen for storage changes (from other tabs)
@@ -78,34 +61,23 @@ const handleSystemThemeChange = (e: MediaQueryListEvent) => {
   if (isAutoMode.value) {
     isDarkMode.value = e.matches;
     document.documentElement.classList.toggle("dark", isDarkMode.value);
-    // Dispatch custom event so other parts of the app can react to theme changes
-    window.dispatchEvent(
-      new CustomEvent("theme-change", { detail: isDarkMode.value })
-    );
   }
 };
 
 // Initialize theme and media query listener
+let isSetup = false;
 let mediaQuery: MediaQueryList | null = null;
 
-onMounted(() => {
+const setupTheme = () => {
+  if (isSetup) return;
+  isSetup = true;
+
   applyTheme();
-  window.addEventListener("theme-change", handleThemeChange);
   window.addEventListener("storage", handleStorageChange);
 
   // Set up system color scheme listener
   mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
   mediaQuery.addEventListener("change", handleSystemThemeChange);
-});
+};
 
-// Clean up event listeners
-onUnmounted(() => {
-  window.removeEventListener("theme-change", handleThemeChange);
-  window.removeEventListener("storage", handleStorageChange);
-
-  if (mediaQuery) {
-    mediaQuery.removeEventListener("change", handleSystemThemeChange);
-  }
-});
-
-export { isDarkMode, isAutoMode, toggleTheme, toggleAutoMode, applyTheme };
+export { isDarkMode, isAutoMode, toggleTheme, toggleAutoMode, applyTheme, setupTheme };

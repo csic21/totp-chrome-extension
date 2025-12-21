@@ -28,13 +28,7 @@ import {
   isAutoMode,
   toggleTheme,
   toggleAutoMode,
-  applyTheme,
 } from "../composables/useTheme";
-
-// Apply theme on component mount
-onMounted(() => {
-  applyTheme();
-});
 
 let intervalId: number | undefined;
 
