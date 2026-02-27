@@ -9,12 +9,16 @@ import {
   validateBase32Secret,
   type TotpAccounts,
 } from "../lib/totp";
+import QRCode from "qrcode";
 
 // Using an array of objects for accounts
 const accounts = ref<TotpAccounts>([]);
 const currentTokens = ref<{ token: string; remainingTime: number }[]>([]);
 const isModalOpen = ref(false);
 const isQrScannerOpen = ref(false);
+const showQRCode = ref(false);
+const selectedAccountForQR = ref<{ name: string; secret: string } | null>(null);
+const qrCodeDataUrl = ref<string>("");
 const copiedIndex = ref<number | null>(null);
 // For editing account names
 const editingIndex = ref<number | null>(null);
@@ -67,7 +71,7 @@ const getStorageAccounts = async () => {
       ([name, account]: [string, any]) => ({
         name,
         secret: account.secret,
-      })
+      }),
     );
     // Save the migrated data back
     await chrome.storage.sync.set({ totpAccounts: storedAccounts });
@@ -128,7 +132,7 @@ const handleAccountAdded = async ({
   // Validate the secret before adding
   if (!validateBase32Secret(secret)) {
     alert(
-      "Invalid secret key format. Please enter a valid Base32 encoded secret."
+      "Invalid secret key format. Please enter a valid Base32 encoded secret.",
     );
     return;
   }
@@ -157,7 +161,7 @@ const handleQrScanSuccess = async ({
   // Validate the secret before adding
   if (!validateBase32Secret(secret)) {
     alert(
-      "Invalid secret key format. Please enter a valid Base32 encoded secret."
+      "Invalid secret key format. Please enter a valid Base32 encoded secret.",
     );
     return;
   }
@@ -185,7 +189,7 @@ const updateAllTokens = () => {
 
 // Check if content is overflowing
 const checkContentOverflow = () => {
-  const element = document.querySelector('.totp-container');
+  const element = document.querySelector(".totp-container");
   if (element) {
     const rect = element.getBoundingClientRect();
     const viewportHeight = window.innerHeight;
@@ -195,7 +199,7 @@ const checkContentOverflow = () => {
 
 // GitHub link
 const openGitHub = () => {
-  window.open('https://github.com/csic21/totp-chrome-extension', '_blank');
+  window.open("https://github.com/csic21/totp-chrome-extension", "_blank");
 };
 
 // Functions for editing account names
@@ -255,6 +259,35 @@ const openQrScanner = () => {
   isQrScannerOpen.value = true;
 };
 
+// Generate QR code for TOTP account (for mobile import)
+const generateQRCode = async (name: string, secret: string) => {
+  try {
+    // Generate otpauth URI for TOTP
+    const otpUri = `otpauth://totp/${encodeURIComponent(name)}?secret=${secret}&algorithm=SHA1&digits=6&period=30`;
+    // Generate QR code as data URL
+    const dataUrl = await QRCode.toDataURL(otpUri, {
+      width: 256,
+      margin: 2,
+      color: {
+        dark: isDarkMode.value ? "#ffffff" : "#000000",
+        light: isDarkMode.value ? "#1f2937" : "#ffffff",
+      },
+    });
+    qrCodeDataUrl.value = dataUrl;
+    selectedAccountForQR.value = { name, secret };
+    showQRCode.value = true;
+  } catch (err) {
+    console.error("Failed to generate QR code: ", err);
+    alert("Failed to generate QR code.");
+  }
+};
+
+const closeQRCode = () => {
+  showQRCode.value = false;
+  selectedAccountForQR.value = null;
+  qrCodeDataUrl.value = "";
+};
+
 onMounted(() => {
   loadAccounts();
   intervalId = setInterval(updateAllTokens, 1000) as unknown as number;
@@ -262,7 +295,7 @@ onMounted(() => {
   // Check for content overflow
   nextTick(() => {
     checkContentOverflow();
-    window.addEventListener('resize', checkContentOverflow);
+    window.addEventListener("resize", checkContentOverflow);
   });
 });
 
@@ -270,7 +303,7 @@ onUnmounted(() => {
   if (intervalId) {
     clearInterval(intervalId);
   }
-  window.removeEventListener('resize', checkContentOverflow);
+  window.removeEventListener("resize", checkContentOverflow);
 });
 </script>
 
@@ -388,41 +421,107 @@ onUnmounted(() => {
       @close="isQrScannerOpen = false"
       :is-dark-mode="isDarkMode"
     />
- <div class="flex justify-between items-start">
-        <h2
+
+    <!-- QR Code Display Modal -->
+    <div
+      v-if="showQRCode"
+      :class="[
+        'fixed inset-0 z-50 flex items-center justify-center p-4',
+        { 'bg-black/50': !isDarkMode, 'bg-black/70': isDarkMode },
+      ]"
+      @click.self="closeQRCode"
+    >
+      <div
+        :class="[
+          'rounded-lg p-6 shadow-xl max-w-sm w-full',
+          { 'bg-white': !isDarkMode, 'bg-gray-800': isDarkMode },
+        ]"
+      >
+        <div class="flex justify-between items-center mb-4">
+          <h3
+            :class="[
+              'text-lg font-semibold',
+              { 'text-gray-800': !isDarkMode, 'text-white': isDarkMode },
+            ]"
+          >
+            {{ selectedAccountForQR?.name }}
+          </h3>
+          <button
+            @click="closeQRCode"
+            :class="[
+              'p-1 rounded-full focus:outline-none transition-colors',
+              {
+                'hover:bg-gray-100 text-gray-500': !isDarkMode,
+                'hover:bg-gray-700 text-gray-400': isDarkMode,
+              },
+            ]"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke-width="1.5"
+              stroke="currentColor"
+              class="size-6"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                d="M6 18 18 6M6 6l12 12"
+              />
+            </svg>
+          </button>
+        </div>
+        <div class="flex justify-center mb-4">
+          <img :src="qrCodeDataUrl" alt="QR Code" class="rounded-lg" />
+        </div>
+        <p
           :class="[
-            'text-base font-semibold mb-2',
+            'text-center text-sm',
             { 'text-gray-600': !isDarkMode, 'text-gray-400': isDarkMode },
           ]"
         >
-          Your Accounts
-        </h2>
-        <!-- GitHub Link -->
-        <button
-          @click="openGitHub"
-          :class="[
-            'p-1 rounded-full transition-all duration-200 focus:outline-none focus:ring-2 shadow-embossed-light hover:scale-110',
-            {
-              'text-gray-600 hover:bg-gray-200 hover:text-gray-800 focus:ring-gray-300':
-                !isDarkMode,
-              'text-gray-400 hover:bg-gray-700 hover:text-gray-200 focus:ring-gray-500':
-                isDarkMode,
-            },
-          ]"
-          title="View on GitHub"
-        >
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            viewBox="0 0 24 24"
-            fill="currentColor"
-            class="w-5 h-5"
-          >
-            <path d="M12 2C6.477 2 2 6.477 2 12c0 4.42 2.87 8.17 6.84 9.5.5.08.66-.23.66-.5v-1.69c-2.77.6-3.36-1.34-3.36-1.34-.46-1.16-1.11-1.47-1.11-1.47-.91-.62.07-.6.07-.6 1 .07 1.53 1.03 1.53 1.03.87 1.52 2.34 1.07 2.91.83.09-.65.35-1.09.63-1.34-2.22-.25-4.55-1.11-4.55-4.92 0-1.11.38-2 1.03-2.71-.1-.25-.45-1.29.1-2.64 0 0 .84-.27 2.75 1.02.79-.22 1.65-.33 2.5-.33.85 0 1.71.11 2.5.33 1.91-1.29 2.75-1.02 2.75-1.02.55 1.35.2 2.39.1 2.64.65.71 1.03 1.6 1.03 2.71 0 3.82-2.34 4.66-4.57 4.91.36.31.69.92.69 1.85V21c0 .27.16.59.67.5C19.14 20.16 22 16.42 22 12A10 10 0 0 0 12 2z"/>
-          </svg>
-        </button>
+          Scan with your phone to import
+        </p>
       </div>
+    </div>
+
+    <div class="flex justify-between items-start">
+      <h2
+        :class="[
+          'text-base font-semibold mb-2',
+          { 'text-gray-600': !isDarkMode, 'text-gray-400': isDarkMode },
+        ]"
+      >
+        Your Accounts
+      </h2>
+      <!-- GitHub Link -->
+      <button
+        @click="openGitHub"
+        :class="[
+          'p-1 rounded-full transition-all duration-200 focus:outline-none focus:ring-2 shadow-embossed-light hover:scale-110',
+          {
+            'text-gray-600 hover:bg-gray-200 hover:text-gray-800 focus:ring-gray-300':
+              !isDarkMode,
+            'text-gray-400 hover:bg-gray-700 hover:text-gray-200 focus:ring-gray-500':
+              isDarkMode,
+          },
+        ]"
+        title="View on GitHub"
+      >
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          viewBox="0 0 24 24"
+          fill="currentColor"
+          class="w-5 h-5"
+        >
+          <path
+            d="M12 2C6.477 2 2 6.477 2 12c0 4.42 2.87 8.17 6.84 9.5.5.08.66-.23.66-.5v-1.69c-2.77.6-3.36-1.34-3.36-1.34-.46-1.16-1.11-1.47-1.11-1.47-.91-.62.07-.6.07-.6 1 .07 1.53 1.03 1.53 1.03.87 1.52 2.34 1.07 2.91.83.09-.65.35-1.09.63-1.34-2.22-.25-4.55-1.11-4.55-4.92 0-1.11.38-2 1.03-2.71-.1-.25-.45-1.29.1-2.64 0 0 .84-.27 2.75 1.02.79-.22 1.65-.33 2.5-.33.85 0 1.71.11 2.5.33 1.91-1.29 2.75-1.02 2.75-1.02.55 1.35.2 2.39.1 2.64.65.71 1.03 1.6 1.03 2.71 0 3.82-2.34 4.66-4.57 4.91.36.31.69.92.69 1.85V21c0 .27.16.59.67.5C19.14 20.16 22 16.42 22 12A10 10 0 0 0 12 2z"
+          />
+        </svg>
+      </button>
+    </div>
     <div class="space-y-3">
-     
       <p
         :class="[
           'text-center py-4',
@@ -570,11 +669,46 @@ onUnmounted(() => {
                 v-if="editingIndex !== index"
                 class="flex items-center gap-1 ml-3"
               >
+                <!-- QR Code Button -->
+                <button
+                  @click="generateQRCode(account.name, account.secret)"
+                  :class="[
+                    'ml-2 p-1 rounded-full focus:outline-none transition-colors shadow-embossed-light',
+                    {
+                      'text-gray-500 hover:bg-gray-100 focus:ring-gray-300':
+                        !isDarkMode,
+                      'text-gray-400 hover:bg-gray-700 focus:ring-gray-500':
+                        isDarkMode,
+                    },
+                  ]"
+                  title="Show QR code"
+                >
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke-width="1.5"
+                    stroke="currentColor"
+                    class="size-4"
+                  >
+                    <path
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      d="M3.75 4.875c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v4.5c0 .621-.504 1.125-1.125 1.125h-4.5A1.125 1.125 0 0 1 3.75 9.375v-4.5ZM3.75 14.625c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v4.5c0 .621-.504 1.125-1.125 1.125h-4.5a1.125 1.125 0 0 1-1.125-1.125v-4.5ZM13.5 4.875c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v4.5c0 .621-.504 1.125-1.125 1.125h-4.5A1.125 1.125 0 0 1 13.5 9.375v-4.5Z"
+                    />
+                    <path
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      d="M6.75 6.75h.75v.75h-.75v-.75ZM6.75 16.5h.75v.75h-.75v-.75ZM16.5 6.75h.75v.75h-.75v-.75ZM13.5 13.5h.75v.75h-.75v-.75ZM13.5 19.5h.75v.75h-.75v-.75ZM19.5 13.5h.75v.75h-.75v-.75ZM19.5 19.5h.75v.75h-.75v-.75ZM16.5 16.5h.75v.75h-.75v-.75Z"
+                    />
+                  </svg>
+                </button>
+
                 <div class="relative">
                   <button
                     @click="startEditing(index, account.name)"
                     :class="[
-                      'ml-2 p-1 rounded-full focus:outline-none transition-colors shadow-embossed-light',
+                      'p-1 rounded-full focus:outline-none transition-colors shadow-embossed-light',
                       {
                         'text-gray-500 hover:bg-gray-100 focus:ring-gray-300':
                           !isDarkMode,
@@ -720,8 +854,7 @@ onUnmounted(() => {
         </div>
       </div>
     </div>
-
-    </div>
+  </div>
 </template>
 
 <style>

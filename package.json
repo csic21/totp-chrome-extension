@@ -15,6 +15,7 @@
     "base32-encode": "^2.0.0",
     "jsqr": "^1.4.0",
     "otpauth": "^9.4.1",
+    "qrcode": "^1.5.4",
     "vue": "^3.5.18"
   },
   "devDependencies": {
@@ -22,6 +23,7 @@
     "@tailwindcss/postcss": "^4.1.12",
     "@types/chrome": "^0.1.4",
     "@types/google-protobuf": "^3.15.12",
+    "@types/qrcode": "^1.5.6",
     "@vitejs/plugin-vue": "^6.0.1",
     "@vitest/ui": "^3.2.4",
     "@vue/tsconfig": "^0.7.0",
