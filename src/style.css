@@ -563,9 +563,13 @@ html.dark .chrome-panel::before {
 
 .account-card__token-group {
   display: flex;
-  align-items: center;
-  gap: 12px;
+  flex: 1 1 auto;
   min-width: 0;
+}
+
+.account-card__copy-button {
+  flex: 0 0 auto;
+  align-self: flex-start;
 }
 
 .token-display {
@@ -890,8 +894,7 @@ body.popup-page .summary-card--domain {
     grid-template-columns: 1fr;
   }
 
-  .section-header,
-  .account-card__top {
+  .section-header {
     flex-direction: column;
     align-items: stretch;
   }
