@@ -43,6 +43,8 @@ html.dark {
   --shadow-panel: 0 28px 80px rgba(0, 0, 0, 0.45);
   --shadow-card: 0 18px 40px rgba(0, 0, 0, 0.32);
   --shadow-soft: 0 10px 24px rgba(0, 0, 0, 0.24);
+  --success: #32b37b;
+  --danger: #ff6b63;
 }
 
 html,
@@ -483,6 +485,16 @@ html.dark .chrome-panel::before {
   color: var(--success);
 }
 
+html.dark .icon-button--danger:hover:not(:disabled) {
+  background: rgba(255, 107, 99, 0.12);
+  border-color: rgba(255, 107, 99, 0.2);
+}
+
+html.dark .icon-button--success:hover:not(:disabled) {
+  background: rgba(50, 179, 123, 0.12);
+  border-color: rgba(50, 179, 123, 0.2);
+}
+
 .pill-button {
   display: inline-flex;
   align-items: center;
@@ -701,6 +713,7 @@ html.dark .chrome-panel::before {
 }
 
 .modal-card {
+  position: relative;
   width: min(100%, 420px);
   padding: 24px;
   border-radius: 28px;
@@ -723,6 +736,12 @@ html.dark .chrome-panel::before {
   color: var(--app-muted);
   font-size: 14px;
   line-height: 1.5;
+}
+
+.modal-close {
+  position: absolute;
+  top: 18px;
+  right: 18px;
 }
 
 .form-stack {

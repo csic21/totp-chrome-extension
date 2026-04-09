@@ -179,18 +179,11 @@ const handleAccountUpdated = async ({
 }) => {
   if (editingIndex.value === null) return;
 
-  if (!validateBase32Secret(secret)) {
-    alert(
-      "Invalid secret key format. Please enter a valid Base32 encoded secret.",
-    );
-    return;
-  }
-
   const currentAccount = accounts.value[editingIndex.value];
   accounts.value[editingIndex.value] = {
     ...currentAccount,
     name,
-    secret,
+    secret: secret || currentAccount.secret,
   };
   await saveAccounts();
   updateAllTokens();
@@ -724,7 +717,6 @@ onUnmounted(() => {
       :is-dark-mode="isDarkMode"
       mode="edit"
       :initial-name="accounts[editingIndex]?.name || ''"
-      :initial-secret="accounts[editingIndex]?.secret || ''"
       @submit="handleAccountUpdated"
       @close="cancelEdit"
     />
@@ -776,29 +768,28 @@ onUnmounted(() => {
         @click.self="closeQRCode"
       >
         <div class="modal-card">
-          <div class="section-header mb-0">
-            <div>
-              <h3 class="modal-title text-[22px]">
-                {{ selectedAccountForQR?.name }}
-              </h3>
-              <p class="modal-copy">Scan with your phone to import this account.</p>
-            </div>
-            <button class="icon-button" @click="closeQRCode">
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke-width="1.5"
-                stroke="currentColor"
-                class="size-5"
-              >
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  d="M6 18 18 6M6 6l12 12"
-                />
-              </svg>
-            </button>
+          <button class="icon-button modal-close" @click="closeQRCode">
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke-width="1.5"
+              stroke="currentColor"
+              class="size-5"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                d="M6 18 18 6M6 6l12 12"
+              />
+            </svg>
+          </button>
+
+          <div>
+            <h3 class="modal-title text-[22px]">
+              {{ selectedAccountForQR?.name }}
+            </h3>
+            <p class="modal-copy">Scan with your phone to import this account.</p>
           </div>
 
           <div class="qr-preview mt-5">
