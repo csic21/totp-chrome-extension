@@ -226,7 +226,6 @@ html.dark .chrome-panel::before {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
-  margin-top: 20px;
 }
 
 .summary-card {
@@ -336,8 +335,8 @@ html.dark .chrome-panel::before {
 
 .topbar {
   display: grid;
-  gap: 14px;
-  margin-bottom: 20px;
+  gap: 12px;
+  margin-bottom: 12px;
 }
 
 .topbar__header {
