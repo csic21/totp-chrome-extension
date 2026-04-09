@@ -3,15 +3,9 @@ import TotpAuthenticator from "../shared/TotpAuthenticator.vue";
 </script>
 
 <template>
-  <div class="w-85 overflow-hidden shadow-embossed">
-    <TotpAuthenticator />
+  <div class="app-shell app-shell--popup">
+    <div class="chrome-panel chrome-panel--popup">
+      <TotpAuthenticator />
+    </div>
   </div>
 </template>
-
-<style>
-/* Popup-specific styles */
-body {
-  margin: 0;
-  padding: 0;
-}
-</style>

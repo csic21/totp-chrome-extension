@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, nextTick } from "vue";
+import { ref, computed, onMounted, onUnmounted, nextTick } from "vue";
 import AddAccountModal from "../components/AddAccountModal.vue";
 import QrScanner from "../components/QrScanner.vue";
 import AddMenu from "../components/AddMenu.vue";
@@ -10,23 +10,6 @@ import {
   type TotpAccounts,
 } from "../lib/totp";
 import QRCode from "qrcode";
-
-// Using an array of objects for accounts
-const accounts = ref<TotpAccounts>([]);
-const currentTokens = ref<{ token: string; remainingTime: number }[]>([]);
-const isModalOpen = ref(false);
-const isQrScannerOpen = ref(false);
-const showQRCode = ref(false);
-const selectedAccountForQR = ref<{ name: string; secret: string } | null>(null);
-const qrCodeDataUrl = ref<string>("");
-const copiedIndex = ref<number | null>(null);
-// For editing account names
-const editingIndex = ref<number | null>(null);
-const editedName = ref<string>("");
-const currentHostname = ref<string | undefined>();
-const isContentOverflowing = ref(false);
-
-// Theme management
 import {
   isDarkMode,
   isAutoMode,
@@ -34,7 +17,43 @@ import {
   toggleAutoMode,
 } from "../composables/useTheme";
 
+const accounts = ref<TotpAccounts>([]);
+const currentTokens = ref<{ token: string; remainingTime: number }[]>([]);
+const isModalOpen = ref(false);
+const isQrScannerOpen = ref(false);
+const showQRCode = ref(false);
+const selectedAccountForQR = ref<{ name: string; secret: string } | null>(null);
+const qrCodeDataUrl = ref("");
+const copiedIndex = ref<number | null>(null);
+const editingIndex = ref<number | null>(null);
+const editedName = ref("");
+const currentHostname = ref<string | undefined>();
+const isContentOverflowing = ref(false);
+
 let intervalId: number | undefined;
+
+const accountCount = computed(() => accounts.value.length);
+const pinnedCount = computed(
+  () => accounts.value.filter((account) => Boolean(account.activePath)).length,
+);
+const activeHostCount = computed(
+  () =>
+    accounts.value.filter(
+      (account) => account.activePath === currentHostname.value,
+    ).length,
+);
+const currentHostLabel = computed(
+  () => currentHostname.value || "No active domain detected",
+);
+const currentDomainAccounts = computed(() =>
+  accounts.value
+    .map((account, index) => ({
+      index,
+      account,
+      token: currentTokens.value[index]?.token,
+    }))
+    .filter((item) => item.account.activePath === currentHostname.value),
+);
 
 const getCurrentTabHostname = async (): Promise<string | undefined> => {
   try {
@@ -43,7 +62,7 @@ const getCurrentTabHostname = async (): Promise<string | undefined> => {
       currentWindow: true,
     });
 
-    if (activeTab && activeTab.url) {
+    if (activeTab?.url) {
       const url = new URL(activeTab.url);
       return url.hostname;
     }
@@ -57,14 +76,21 @@ const sorterAccounts = () => {
   accounts.value.sort((a, b) => {
     const asort = a.activePath === currentHostname.value ? 0 : 1;
     const bsort = b.activePath === currentHostname.value ? 0 : 1;
-    return asort - bsort;
+    if (asort !== bsort) {
+      return asort - bsort;
+    }
+
+    const aOrigin = a.originIndex ?? Number.MAX_SAFE_INTEGER;
+    const bOrigin = b.originIndex ?? Number.MAX_SAFE_INTEGER;
+    return aOrigin - bOrigin;
   });
   updateAllTokens();
 };
+
 const getStorageAccounts = async () => {
   const result = await chrome.storage.sync.get("totpAccounts");
   let storedAccounts: TotpAccounts = result.totpAccounts;
-  // Data migration: if old object format is found, convert to array
+
   if (storedAccounts && !Array.isArray(storedAccounts)) {
     console.log("Migrating data from object to array format...");
     storedAccounts = Object.entries(storedAccounts).map(
@@ -73,7 +99,6 @@ const getStorageAccounts = async () => {
         secret: account.secret,
       }),
     );
-    // Save the migrated data back
     await chrome.storage.sync.set({ totpAccounts: storedAccounts });
   }
 
@@ -83,6 +108,7 @@ const getStorageAccounts = async () => {
       originIndex: index + 1,
     })) || [];
 };
+
 const loadAccounts = async () => {
   try {
     currentHostname.value = await getCurrentTabHostname();
@@ -123,13 +149,6 @@ const handleAccountAdded = async ({
   name: string;
   secret: string;
 }) => {
-  // // Allow duplicate names, but not duplicate secrets
-  // if (accounts.value.find(acc => acc.secret === secret)) {
-  //   alert('Account with this secret already exists.');
-  //   return;
-  // }
-
-  // Validate the secret before adding
   if (!validateBase32Secret(secret)) {
     alert(
       "Invalid secret key format. Please enter a valid Base32 encoded secret.",
@@ -137,7 +156,6 @@ const handleAccountAdded = async ({
     return;
   }
 
-  // Add new account to the array
   accounts.value.push({ name, secret });
   cancelEdit();
   await saveAccounts();
@@ -152,13 +170,6 @@ const handleQrScanSuccess = async ({
   name: string;
   secret: string;
 }) => {
-  // Allow duplicate names, but not duplicate secrets
-  // if (accounts.value.find(acc => acc.secret === secret)) {
-  //   alert('Account with this secret already exists.');
-  //   return;
-  // }
-
-  // Validate the secret before adding
   if (!validateBase32Secret(secret)) {
     alert(
       "Invalid secret key format. Please enter a valid Base32 encoded secret.",
@@ -166,7 +177,6 @@ const handleQrScanSuccess = async ({
     return;
   }
 
-  // Add new account to the array
   handleAccountAdded({ name, secret });
   isQrScannerOpen.value = false;
 };
@@ -180,60 +190,48 @@ const deleteAccount = async (index: number) => {
 };
 
 const updateAllTokens = () => {
-  // Use the utility function to generate all tokens
-  const tokens = generateAllTokens(accounts.value);
-
-  // Update the reactive refs
-  currentTokens.value = tokens;
+  currentTokens.value = generateAllTokens(accounts.value);
 };
 
-// Check if content is overflowing
 const checkContentOverflow = () => {
   const element = document.querySelector(".totp-container");
-  if (element) {
-    const rect = element.getBoundingClientRect();
-    const viewportHeight = window.innerHeight;
-    isContentOverflowing.value = rect.height > viewportHeight * 0.8;
-  }
+  if (!element) return;
+
+  const rect = element.getBoundingClientRect();
+  const viewportHeight = window.innerHeight;
+  isContentOverflowing.value = rect.height > viewportHeight * 0.8;
 };
 
-// GitHub link
 const openGitHub = () => {
   window.open("https://github.com/csic21/totp-chrome-extension", "_blank");
 };
 
-// Functions for editing account names
 const startEditing = (index: number, currentName: string) => {
   editingIndex.value = index;
   editedName.value = currentName;
 };
 
 const focusHostName = (index: number) => {
-  // give account current hostname
   accounts.value[index].activePath = currentHostname.value;
   saveAccounts();
 };
 
 const unFocusHostName = (index: number) => {
-  // remove account activePath
   accounts.value[index].activePath = undefined;
   saveAccounts();
 };
+
 const saveEdit = async () => {
-  if (editingIndex.value !== null) {
-    // Validate the new name (e.g., not empty)
-    if (!editedName.value.trim()) {
-      alert("Account name cannot be empty.");
-      return;
-    }
+  if (editingIndex.value === null) return;
 
-    // Update the account name
-    accounts.value[editingIndex.value].name = editedName.value.trim();
-    await saveAccounts();
-
-    // Exit editing mode
-    cancelEdit();
+  if (!editedName.value.trim()) {
+    alert("Account name cannot be empty.");
+    return;
   }
+
+  accounts.value[editingIndex.value].name = editedName.value.trim();
+  await saveAccounts();
+  cancelEdit();
 };
 
 const cancelEdit = () => {
@@ -243,6 +241,7 @@ const cancelEdit = () => {
 
 const copyToClipboard = async (index: number, text: string) => {
   if (!text || text === "Error") return;
+
   try {
     await navigator.clipboard.writeText(text);
     copiedIndex.value = index;
@@ -259,12 +258,13 @@ const openQrScanner = () => {
   isQrScannerOpen.value = true;
 };
 
-// Generate QR code for TOTP account (for mobile import)
+const copyCurrentDomainAccount = (index: number, token: string) => {
+  copyToClipboard(index, token);
+};
+
 const generateQRCode = async (name: string, secret: string) => {
   try {
-    // Generate otpauth URI for TOTP
     const otpUri = `otpauth://totp/${encodeURIComponent(name)}?secret=${secret}&algorithm=SHA1&digits=6&period=30`;
-    // Generate QR code as data URL
     const dataUrl = await QRCode.toDataURL(otpUri, {
       width: 256,
       margin: 2,
@@ -292,7 +292,6 @@ onMounted(() => {
   loadAccounts();
   intervalId = setInterval(updateAllTokens, 1000) as unknown as number;
 
-  // Check for content overflow
   nextTick(() => {
     checkContentOverflow();
     window.addEventListener("resize", checkContentOverflow);
@@ -309,72 +308,36 @@ onUnmounted(() => {
 
 <template>
   <div
-    :class="[
-      'w-full max-w-md p-4 font-sans mx-auto min-h-[400px] shadow-embossed relative totp-container',
-      {
-        'bg-gray-100 text-gray-800': !isDarkMode,
-        'bg-gray-900 text-white': isDarkMode,
-      },
-    ]"
+    class="auth-shell totp-container"
+    :class="{ 'auth-shell--scroll': isContentOverflowing }"
   >
-    <div class="flex justify-between items-start mb-4">
-      <h1
-        :class="[
-          'text-xl font-bold',
-          { 'text-gray-700': !isDarkMode, 'text-gray-200': isDarkMode },
-        ]"
-      >
-        TOTP Authenticator
-      </h1>
-      <div class="flex items-center gap-2">
-        <!-- Auto Mode Switch -->
-        <div class="flex items-center gap-1">
-          <span
-            :class="[
-              'text-sm',
-              { 'text-gray-700': !isDarkMode, 'text-gray-300': isDarkMode },
-            ]"
-          >
-            Auto
-          </span>
+    <div class="topbar">
+      <div class="hero-block">
+        <div class="hero-label">
+          <span class="status-pill__dot"></span>
+          TOTP Authenticator
+        </div>
+        <h1 class="hero-title">Codes ready for the page you are on.</h1>
+        <p class="hero-subtitle">
+          Add secrets manually, scan QR codes, and keep the active domain pinned
+          to the top without changing how the extension works.
+        </p>
+      </div>
+
+      <div class="topbar__actions">
+        <div class="theme-toggle">
+          <span class="theme-toggle__label">Auto</span>
           <button
+            class="toggle-track"
+            :class="{ 'is-active': isAutoMode }"
+            title="Toggle auto theme"
             @click="toggleAutoMode"
-            :class="[
-              'relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-offset-1',
-              {
-                'bg-gray-600 focus:ring-gray-300': isAutoMode && !isDarkMode,
-                'bg-gray-500 focus:ring-gray-500': isAutoMode && isDarkMode,
-                'bg-gray-200': !isAutoMode && !isDarkMode,
-                'bg-gray-600': !isAutoMode && isDarkMode,
-              },
-            ]"
-            title="Toggle auto theme (follow system)"
           >
-            <span
-              :class="[
-                'inline-block h-3 w-3 transform rounded-full bg-white transition-transform',
-                {
-                  'translate-x-5': isAutoMode,
-                  'translate-x-1': !isAutoMode,
-                },
-              ]"
-            />
+            <span class="toggle-track__thumb"></span>
           </button>
         </div>
 
-        <!-- Theme Toggle Button -->
-        <button
-          @click="toggleTheme"
-          :class="[
-            'p-1 rounded-full focus:outline-none focus:ring-2 transition-colors shadow-embossed-light',
-            {
-              'text-gray-700 hover:bg-gray-200 focus:ring-gray-300':
-                !isDarkMode,
-              'text-gray-300 hover:bg-gray-700 focus:ring-gray-500': isDarkMode,
-            },
-          ]"
-          title="Toggle dark mode"
-        >
+        <button class="icon-button" title="Toggle dark mode" @click="toggleTheme">
           <svg
             v-if="isDarkMode"
             xmlns="http://www.w3.org/2000/svg"
@@ -401,172 +364,120 @@ onUnmounted(() => {
           </svg>
         </button>
 
+        <button class="icon-button" title="View on GitHub" @click="openGitHub">
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            viewBox="0 0 24 24"
+            fill="currentColor"
+            class="size-5"
+          >
+            <path
+              d="M12 2C6.477 2 2 6.477 2 12c0 4.42 2.87 8.17 6.84 9.5.5.08.66-.23.66-.5v-1.69c-2.77.6-3.36-1.34-3.36-1.34-.46-1.16-1.11-1.47-1.11-1.47-.91-.62.07-.6.07-.6 1 .07 1.53 1.03 1.53 1.03.87 1.52 2.34 1.07 2.91.83.09-.65.35-1.09.63-1.34-2.22-.25-4.55-1.11-4.55-4.92 0-1.11.38-2 1.03-2.71-.1-.25-.45-1.29.1-2.64 0 0 .84-.27 2.75 1.02.79-.22 1.65-.33 2.5-.33.85 0 1.71.11 2.5.33 1.91-1.29 2.75-1.02 2.75-1.02.55 1.35.2 2.39.1 2.64.65.71 1.03 1.6 1.03 2.71 0 3.82-2.34 4.66-4.57 4.91.36.31.69.92.69 1.85V21c0 .27.16.59.67.5C19.14 20.16 22 16.42 22 12A10 10 0 0 0 12 2Z"
+            />
+          </svg>
+        </button>
+
         <AddMenu
+          :is-dark-mode="isDarkMode"
           @add-account="isModalOpen = true"
           @scan-qr="openQrScanner"
-          :is-dark-mode="isDarkMode"
         />
       </div>
     </div>
 
-    <AddAccountModal
-      v-if="isModalOpen"
-      @add-account="handleAccountAdded"
-      @close="isModalOpen = false"
-      :is-dark-mode="isDarkMode"
-    />
-    <QrScanner
-      v-if="isQrScannerOpen"
-      @scan-success="handleQrScanSuccess"
-      @close="isQrScannerOpen = false"
-      :is-dark-mode="isDarkMode"
-    />
-
-    <!-- QR Code Display Modal -->
-    <div
-      v-if="showQRCode"
-      :class="[
-        'fixed inset-0 z-50 flex items-center justify-center p-4',
-        { 'bg-black/50': !isDarkMode, 'bg-black/70': isDarkMode },
-      ]"
-      @click.self="closeQRCode"
-    >
-      <div
-        :class="[
-          'rounded-lg p-6 shadow-xl max-w-sm w-full',
-          { 'bg-white': !isDarkMode, 'bg-gray-800': isDarkMode },
-        ]"
-      >
-        <div class="flex justify-between items-center mb-4">
-          <h3
-            :class="[
-              'text-lg font-semibold',
-              { 'text-gray-800': !isDarkMode, 'text-white': isDarkMode },
-            ]"
-          >
-            {{ selectedAccountForQR?.name }}
-          </h3>
-          <button
-            @click="closeQRCode"
-            :class="[
-              'p-1 rounded-full focus:outline-none transition-colors',
-              {
-                'hover:bg-gray-100 text-gray-500': !isDarkMode,
-                'hover:bg-gray-700 text-gray-400': isDarkMode,
-              },
-            ]"
-          >
+    <div class="summary-grid">
+      <div class="summary-card summary-card--domain">
+        <div class="summary-card__label">Current Domain</div>
+        <div class="summary-card__value text-[18px] leading-tight">
+          {{ currentHostLabel }}
+        </div>
+        <div class="summary-card__meta">
+          {{ activeHostCount }} pinned account(s) match this site.
+        </div>
+        <div v-if="activeHostCount > 0" class="summary-card__actions">
+          <div class="summary-card__hint">
             <svg
               xmlns="http://www.w3.org/2000/svg"
               fill="none"
               viewBox="0 0 24 24"
               stroke-width="1.5"
               stroke="currentColor"
-              class="size-6"
+              class="size-4 shrink-0"
             >
               <path
                 stroke-linecap="round"
                 stroke-linejoin="round"
-                d="M6 18 18 6M6 6l12 12"
+                d="M15.75 17.25v3.375c0 .621-.504 1.125-1.125 1.125h-9.75a1.125 1.125 0 0 1-1.125-1.125V7.875c0-.621.504-1.125 1.125-1.125H6.75a9.06 9.06 0 0 1 1.5.124m7.5 10.376h3.375c.621 0 1.125-.504 1.125-1.125V11.25c0-4.46-3.243-8.161-7.5-8.876a9.06 9.06 0 0 0-1.5-.124H9.375c-.621 0-1.125.504-1.125 1.125v3.5m7.5 10.375H9.375a1.125 1.125 0 0 1-1.125-1.125v-9.25"
               />
             </svg>
-          </button>
+            Tap an account below to copy the current code.
+          </div>
+          <div class="summary-card__choices">
+            <button
+              v-for="item in currentDomainAccounts"
+              :key="item.index + item.account.secret"
+              class="summary-card__choice"
+              :class="{ 'is-copied': copiedIndex === item.index }"
+              :disabled="!item.token || item.token === 'Error'"
+              @click="copyCurrentDomainAccount(item.index, item.token || '')"
+            >
+              <span class="summary-card__choice-name">
+                {{ item.account.name }}
+              </span>
+              <span class="summary-card__choice-token">
+                {{ copiedIndex === item.index ? "Copied" : item.token || "......" }}
+              </span>
+            </button>
+          </div>
         </div>
-        <div class="flex justify-center mb-4">
-          <img :src="qrCodeDataUrl" alt="QR Code" class="rounded-lg" />
-        </div>
-        <p
-          :class="[
-            'text-center text-sm',
-            { 'text-gray-600': !isDarkMode, 'text-gray-400': isDarkMode },
-          ]"
-        >
-          Scan with your phone to import
-        </p>
+      </div>
+      <div class="summary-card">
+        <div class="summary-card__label">Accounts</div>
+        <div class="summary-card__value">{{ accountCount }}</div>
+        <div class="summary-card__meta">Stored securely in Chrome sync.</div>
+      </div>
+      <div class="summary-card">
+        <div class="summary-card__label">Pinned</div>
+        <div class="summary-card__value">{{ pinnedCount }}</div>
+        <div class="summary-card__meta">Domain-aware sorting stays enabled.</div>
       </div>
     </div>
 
-    <div class="flex justify-between items-start">
-      <h2
-        :class="[
-          'text-base font-semibold mb-2',
-          { 'text-gray-600': !isDarkMode, 'text-gray-400': isDarkMode },
-        ]"
-      >
-        Your Accounts
-      </h2>
-      <!-- GitHub Link -->
-      <button
-        @click="openGitHub"
-        :class="[
-          'p-1 rounded-full transition-all duration-200 focus:outline-none focus:ring-2 shadow-embossed-light hover:scale-110',
-          {
-            'text-gray-600 hover:bg-gray-200 hover:text-gray-800 focus:ring-gray-300':
-              !isDarkMode,
-            'text-gray-400 hover:bg-gray-700 hover:text-gray-200 focus:ring-gray-500':
-              isDarkMode,
-          },
-        ]"
-        title="View on GitHub"
-      >
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          viewBox="0 0 24 24"
-          fill="currentColor"
-          class="w-5 h-5"
+    <div class="surface-section mt-3 p-5 md:p-6">
+      <div class="section-header">
+        <div>
+          <h2 class="section-title">Your Accounts</h2>
+          <p class="section-copy">
+            Tokens refresh automatically every 30 seconds.
+          </p>
+        </div>
+        <div class="status-pill">
+          <span class="status-pill__dot"></span>
+          Live refresh
+        </div>
+      </div>
+
+      <div class="account-list">
+        <div v-if="accounts.length === 0" class="empty-state">
+          No accounts added yet. Use the Add button to create one or import from
+          a QR code.
+        </div>
+
+        <div
+          v-for="(account, index) in accounts"
+          v-else
+          :key="index + account.name + account.secret"
+          class="account-card"
         >
-          <path
-            d="M12 2C6.477 2 2 6.477 2 12c0 4.42 2.87 8.17 6.84 9.5.5.08.66-.23.66-.5v-1.69c-2.77.6-3.36-1.34-3.36-1.34-.46-1.16-1.11-1.47-1.11-1.47-.91-.62.07-.6.07-.6 1 .07 1.53 1.03 1.53 1.03.87 1.52 2.34 1.07 2.91.83.09-.65.35-1.09.63-1.34-2.22-.25-4.55-1.11-4.55-4.92 0-1.11.38-2 1.03-2.71-.1-.25-.45-1.29.1-2.64 0 0 .84-.27 2.75 1.02.79-.22 1.65-.33 2.5-.33.85 0 1.71.11 2.5.33 1.91-1.29 2.75-1.02 2.75-1.02.55 1.35.2 2.39.1 2.64.65.71 1.03 1.6 1.03 2.71 0 3.82-2.34 4.66-4.57 4.91.36.31.69.92.69 1.85V21c0 .27.16.59.67.5C19.14 20.16 22 16.42 22 12A10 10 0 0 0 12 2z"
-          />
-        </svg>
-      </button>
-    </div>
-    <div class="space-y-3">
-      <p
-        :class="[
-          'text-center py-4',
-          { 'text-gray-500': !isDarkMode, 'text-gray-400': isDarkMode },
-        ]"
-        v-if="accounts.length === 0"
-      >
-        No accounts added yet.
-      </p>
-      <div
-        v-for="(account, index) in accounts"
-        :key="index + account.name + account.secret"
-        :class="[
-          'px-3 py-2 rounded-lg flex justify-between items-center shadow-embossed-light',
-          { 'bg-white': !isDarkMode, 'bg-gray-800': isDarkMode },
-        ]"
-      >
-        <div class="flex-grow">
-          <!-- Edit mode -->
-          <div v-if="editingIndex === index" class="flex items-center gap-2">
+          <div v-if="editingIndex === index" class="account-edit">
             <input
               v-model="editedName"
               type="text"
-              :class="[
-                'flex-grow px-2 py-1 rounded-md focus:outline-none focus:ring-2 transition-colors shadow-embossed-light',
-                {
-                  'bg-gray-100 text-gray-800 focus:ring-gray-500': !isDarkMode,
-                  'bg-gray-700 text-white focus:ring-gray-500': isDarkMode,
-                },
-              ]"
+              class="field-input"
               @keyup.enter="saveEdit"
               @keyup.esc="cancelEdit"
             />
-            <button
-              @click="saveEdit"
-              :class="[
-                'p-1 rounded-full focus:outline-none transition-colors shadow-embossed-light',
-                {
-                  'text-green-600 hover:bg-gray-100 focus:ring-green-300':
-                    !isDarkMode,
-                  'text-green-500 hover:bg-gray-700 focus:ring-green-400':
-                    isDarkMode,
-                },
-              ]"
-            >
+            <button class="icon-button icon-button--success" @click="saveEdit">
               <svg
                 xmlns="http://www.w3.org/2000/svg"
                 fill="none"
@@ -582,18 +493,7 @@ onUnmounted(() => {
                 />
               </svg>
             </button>
-            <button
-              @click="cancelEdit"
-              :class="[
-                'p-1 rounded-full focus:outline-none transition-colors shadow-embossed-light',
-                {
-                  'text-gray-500 hover:bg-gray-100 focus:ring-gray-300':
-                    !isDarkMode,
-                  'text-gray-400 hover:bg-gray-700 focus:ring-gray-500':
-                    isDarkMode,
-                },
-              ]"
-            >
+            <button class="icon-button" @click="cancelEdit">
               <svg
                 xmlns="http://www.w3.org/2000/svg"
                 fill="none"
@@ -610,26 +510,18 @@ onUnmounted(() => {
               </svg>
             </button>
           </div>
-          <!-- View mode -->
-          <div v-else>
-            <div class="flex items-center gap-1 justify-between">
-              <div class="flex items-center gap-1">
+
+          <template v-else>
+            <div class="account-card__top">
+              <div class="account-card__token-group">
                 <button
-                  @click="copyToClipboard(index, currentTokens[index]?.token)"
+                  class="icon-button"
                   :disabled="
                     !currentTokens[index]?.token ||
                     currentTokens[index]?.token === 'Error'
                   "
-                  :class="[
-                    'relative p-1 rounded-full focus:outline-none transition-colors shadow-embossed-light',
-                    {
-                      'text-gray-600 hover:bg-gray-100 focus:ring-gray-300':
-                        !isDarkMode,
-                      'text-gray-300 hover:bg-gray-700 focus:ring-gray-500':
-                        isDarkMode,
-                    },
-                  ]"
                   title="Copy to clipboard"
+                  @click="copyToClipboard(index, currentTokens[index]?.token)"
                 >
                   <svg
                     xmlns="http://www.w3.org/2000/svg"
@@ -637,7 +529,7 @@ onUnmounted(() => {
                     viewBox="0 0 24 24"
                     stroke-width="1.5"
                     stroke="currentColor"
-                    class="size-7"
+                    class="size-5"
                   >
                     <path
                       stroke-linecap="round"
@@ -645,43 +537,30 @@ onUnmounted(() => {
                       d="M15.75 17.25v3.375c0 .621-.504 1.125-1.125 1.125h-9.75a1.125 1.125 0 0 1-1.125-1.125V7.875c0-.621.504-1.125 1.125-1.125H6.75a9.06 9.06 0 0 1 1.5.124m7.5 10.376h3.375c.621 0 1.125-.504 1.125-1.125V11.25c0-4.46-3.243-8.161-7.5-8.876a9.06 9.06 0 0 0-1.5-.124H9.375c-.621 0-1.125.504-1.125 1.125v3.5m7.5 10.375H9.375a1.125 1.125 0 0 1-1.125-1.125v-9.25m12 6.625v-1.875a3.375 3.375 0 0 0-3.375-3.375h-1.5a1.125 1.125 0 0 1-1.125-1.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H9.75"
                     />
                   </svg>
-                  <span
-                    v-if="copiedIndex === index"
-                    class="absolute -top-8 left-1/2 -translate-x-1/2 bg-black text-white text-xs rounded-md px-2 py-1"
-                  >
-                    Copied!
-                  </span>
+                  <span v-if="copiedIndex === index" class="tooltip">Copied</span>
                 </button>
 
-                <h2
-                  :class="[
-                    'text-2xl font-mono tracking-wider',
-                    {
-                      'text-gray-700': !isDarkMode,
-                      'text-gray-300': isDarkMode,
-                    },
-                  ]"
-                >
-                  {{ currentTokens[index]?.token || "..." }}
-                </h2>
+                <div class="min-w-0">
+                  <p class="token-display">
+                    {{ currentTokens[index]?.token || "..." }}
+                  </p>
+                  <h3 class="account-card__name">{{ account.name }}</h3>
+                  <div
+                    v-if="account.activePath && account.activePath !== currentHostname"
+                    class="account-card__meta"
+                  >
+                    Pinned: {{ account.activePath }}
+                  </div>
+                </div>
               </div>
-              <div
-                v-if="editingIndex !== index"
-                class="flex items-center gap-1 ml-3"
-              >
-                <!-- QR Code Button -->
+            </div>
+
+            <div class="account-card__actions">
+              <div class="account-card__actions-main">
                 <button
-                  @click="generateQRCode(account.name, account.secret)"
-                  :class="[
-                    'ml-2 p-1 rounded-full focus:outline-none transition-colors shadow-embossed-light',
-                    {
-                      'text-gray-500 hover:bg-gray-100 focus:ring-gray-300':
-                        !isDarkMode,
-                      'text-gray-400 hover:bg-gray-700 focus:ring-gray-500':
-                        isDarkMode,
-                    },
-                  ]"
+                  class="icon-button"
                   title="Show QR code"
+                  @click="generateQRCode(account.name, account.secret)"
                 >
                   <svg
                     xmlns="http://www.w3.org/2000/svg"
@@ -704,48 +583,31 @@ onUnmounted(() => {
                   </svg>
                 </button>
 
-                <div class="relative">
-                  <button
-                    @click="startEditing(index, account.name)"
-                    :class="[
-                      'p-1 rounded-full focus:outline-none transition-colors shadow-embossed-light',
-                      {
-                        'text-gray-500 hover:bg-gray-100 focus:ring-gray-300':
-                          !isDarkMode,
-                        'text-gray-400 hover:bg-gray-700 focus:ring-gray-500':
-                          isDarkMode,
-                      },
-                    ]"
-                    title="Edit name"
-                  >
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke-width="1.5"
-                      stroke="currentColor"
-                      class="size-4"
-                    >
-                      <path
-                        stroke-linecap="round"
-                        stroke-linejoin="round"
-                        d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0 1 15.75 21H5.25A2.25 2.25 0 0 1 3 18.75V8.25A2.25 2.25 0 0 1 5.25 6H10"
-                      />
-                    </svg>
-                  </button>
-                </div>
                 <button
-                  @click="deleteAccount(index)"
-                  :class="[
-                    'p-1 rounded-full focus:outline-none transition-colors shadow-embossed-light',
-                    {
-                      'text-red-500 hover:bg-gray-100 focus:ring-red-300':
-                        !isDarkMode,
-                      'text-red-500 hover:bg-gray-700 focus:ring-red-400':
-                        isDarkMode,
-                    },
-                  ]"
+                  class="icon-button"
+                  title="Edit name"
+                  @click="startEditing(index, account.name)"
+                >
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke-width="1.5"
+                    stroke="currentColor"
+                    class="size-4"
+                  >
+                    <path
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0 1 15.75 21H5.25A2.25 2.25 0 0 1 3 18.75V8.25A2.25 2.25 0 0 1 5.25 6H10"
+                    />
+                  </svg>
+                </button>
+
+                <button
+                  class="icon-button icon-button--danger"
                   title="Delete account"
+                  @click="deleteAccount(index)"
                 >
                   <svg
                     xmlns="http://www.w3.org/2000/svg"
@@ -762,19 +624,12 @@ onUnmounted(() => {
                     />
                   </svg>
                 </button>
+
                 <button
                   v-if="account.activePath !== currentHostname"
-                  @click="focusHostName(index)"
-                  :class="[
-                    'p-1 rounded-full focus:outline-none transition-colors shadow-embossed-light',
-                    {
-                      'text-gray-500 hover:bg-gray-100 focus:ring-gray-300':
-                        !isDarkMode,
-                      'text-gray-400 hover:bg-gray-700 focus:ring-gray-500':
-                        isDarkMode,
-                    },
-                  ]"
+                  class="icon-button"
                   title="Pin the current domain name"
+                  @click="focusHostName(index)"
                 >
                   <svg
                     xmlns="http://www.w3.org/2000/svg"
@@ -791,19 +646,12 @@ onUnmounted(() => {
                     />
                   </svg>
                 </button>
+
                 <button
                   v-else
-                  @click="unFocusHostName(index)"
-                  :class="[
-                    'p-1 rounded-full focus:outline-none transition-colors shadow-embossed-light',
-                    {
-                      'text-green-600 hover:bg-gray-100 focus:ring-green-300':
-                        !isDarkMode,
-                      'text-green-500 hover:bg-gray-700 focus:ring-green-400':
-                        isDarkMode,
-                    },
-                  ]"
+                  class="icon-button icon-button--success"
                   title="Unpin the current domain name"
+                  @click="unFocusHostName(index)"
                 >
                   <svg
                     xmlns="http://www.w3.org/2000/svg"
@@ -821,42 +669,67 @@ onUnmounted(() => {
                   </svg>
                 </button>
               </div>
-            </div>
-            <div class="flex items-end gap-1 justify-between pl-1 pr-1">
-              <h4
-                :class="[
-                  'w-0 text-sm font-medium overflow-hidden text-ellipsis flex-1 flex-nowrap text-nowrap',
-                  { 'text-gray-600': !isDarkMode, 'text-gray-400': isDarkMode },
-                ]"
-              >
-                <span>
-                  {{ account.name }}
-                </span>
-                <div
-                  :class="[
-                    'text-xs overflow-hidden text-ellipsis',
-                    {
-                      'text-gray-500': !isDarkMode,
-                      'text-gray-400': isDarkMode,
-                    },
-                  ]"
-                  v-if="!!account.activePath"
-                >
-                  Pin:
-                  {{ account.activePath }}
-                </div>
-              </h4>
+
               <CircularProgress
                 :remaining-time="currentTokens[index]?.remainingTime"
               />
             </div>
-          </div>
+          </template>
         </div>
       </div>
     </div>
+
+    <AddAccountModal
+      v-if="isModalOpen"
+      :is-dark-mode="isDarkMode"
+      @add-account="handleAccountAdded"
+      @close="isModalOpen = false"
+    />
+
+    <QrScanner
+      v-if="isQrScannerOpen"
+      :is-dark-mode="isDarkMode"
+      @scan-success="handleQrScanSuccess"
+      @close="isQrScannerOpen = false"
+    />
+
+    <Teleport to="body">
+      <div
+        v-if="showQRCode"
+        class="modal-backdrop"
+        @click.self="closeQRCode"
+      >
+        <div class="modal-card">
+          <div class="section-header mb-0">
+            <div>
+              <h3 class="modal-title text-[22px]">
+                {{ selectedAccountForQR?.name }}
+              </h3>
+              <p class="modal-copy">Scan with your phone to import this account.</p>
+            </div>
+            <button class="icon-button" @click="closeQRCode">
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke-width="1.5"
+                stroke="currentColor"
+                class="size-5"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  d="M6 18 18 6M6 6l12 12"
+                />
+              </svg>
+            </button>
+          </div>
+
+          <div class="qr-preview mt-5">
+            <img :src="qrCodeDataUrl" alt="QR Code" class="rounded-2xl" />
+          </div>
+        </div>
+      </div>
+    </Teleport>
   </div>
 </template>
-
-<style>
-/* Using Tailwind CSS classes, so no scoped styles are needed here */
-</style>
