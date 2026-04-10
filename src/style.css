@@ -194,7 +194,6 @@ html.dark .chrome-panel::before {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  margin-bottom: 12px;
   padding: 7px 14px;
   border-radius: 999px;
   background: var(--surface-muted);
@@ -204,6 +203,14 @@ html.dark .chrome-panel::before {
   letter-spacing: 0.04em;
   text-transform: uppercase;
   border: 1px solid var(--surface-border);
+}
+
+.hero-label__logo {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  border-radius: 5px;
+  object-fit: cover;
 }
 
 .info-popover {
@@ -1026,10 +1033,6 @@ body.popup-page .summary-card--domain {
   .section-header {
     flex-direction: column;
     align-items: stretch;
-  }
-
-  .topbar__header {
-    align-items: flex-start;
   }
 
   .topbar__actions {

@@ -387,7 +387,7 @@ onUnmounted(() => {
       <div class="topbar__header">
         <div class="hero-block">
           <div class="hero-label">
-            <span class="status-pill__dot"></span>
+            <img class="hero-label__logo" src="/icon-128.png" alt="" />
             TOTP Authenticator
           </div>
         </div>
