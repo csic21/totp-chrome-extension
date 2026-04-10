@@ -49,9 +49,9 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div ref="root" class="relative">
+  <div ref="root" class="add-menu">
     <button
-      class="pill-button pill-button--primary"
+      class="pill-button pill-button--primary pill-button--compact"
       aria-label="Add account"
       @click="toggleMenu"
     >
