@@ -68,15 +68,27 @@ body {
   margin: 0;
   color: var(--app-text);
   background:
-    radial-gradient(circle at top left, rgba(0, 113, 227, 0.12), transparent 28%),
+    radial-gradient(
+      circle at top left,
+      rgba(0, 113, 227, 0.12),
+      transparent 28%
+    ),
     radial-gradient(circle at top right, rgba(0, 0, 0, 0.08), transparent 24%),
     linear-gradient(180deg, var(--app-bg-alt) 0%, var(--app-bg) 100%);
 }
 
 html.dark body {
   background:
-    radial-gradient(circle at top left, rgba(41, 151, 255, 0.18), transparent 24%),
-    radial-gradient(circle at bottom right, rgba(255, 255, 255, 0.08), transparent 20%),
+    radial-gradient(
+      circle at top left,
+      rgba(41, 151, 255, 0.18),
+      transparent 24%
+    ),
+    radial-gradient(
+      circle at bottom right,
+      rgba(255, 255, 255, 0.08),
+      transparent 20%
+    ),
     linear-gradient(180deg, #070708 0%, var(--app-bg) 100%);
 }
 
@@ -224,6 +236,30 @@ html.dark .chrome-panel::before {
   position: relative;
 }
 
+.info-trigger__icon {
+  width: 13px;
+  height: 13px;
+}
+
+.info-popover--card {
+  width: min(240px, calc(100vw - 48px));
+}
+
+.info-popover--card .info-popover__copy {
+  margin-top: 0;
+}
+
+.info-popover--header-width {
+  top: calc(100% + 12px);
+  right: 0;
+  width: 100%;
+}
+
+.info-popover--card-width {
+  right: 0;
+  width: calc(100% + 18px);
+}
+
 .summary-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -241,6 +277,14 @@ html.dark .chrome-panel::before {
   box-shadow: var(--shadow-soft);
 }
 
+.summary-card__header {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
 .summary-card__label {
   color: var(--app-subtle);
   font-size: 12px;
@@ -255,6 +299,13 @@ html.dark .chrome-panel::before {
   font-weight: 600;
   line-height: 1.1;
   letter-spacing: -0.03em;
+}
+
+.summary-card__value--domain {
+  font-size: 16px;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .summary-card__meta {
@@ -328,8 +379,14 @@ html.dark .chrome-panel::before {
 
 .summary-card__choice-token {
   font-family:
-    ui-monospace, SFMono-Regular, SF Mono, Menlo, Monaco, Consolas,
-    "Liberation Mono", monospace;
+    ui-monospace,
+    SFMono-Regular,
+    SF Mono,
+    Menlo,
+    Monaco,
+    Consolas,
+    "Liberation Mono",
+    monospace;
   font-size: 12px;
   letter-spacing: 0.06em;
   color: var(--app-muted);
@@ -372,11 +429,24 @@ html.dark .chrome-panel::before {
   margin-bottom: 14px;
 }
 
+.section-header__main {
+  flex: 1;
+  min-width: 0;
+}
+
 .section-title {
   margin: 0;
   font-size: 20px;
   font-weight: 600;
   letter-spacing: -0.02em;
+}
+
+.section-title-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
 }
 
 .section-copy {
@@ -476,6 +546,11 @@ html.dark .chrome-panel::before {
 
 .icon-button:disabled {
   opacity: 0.5;
+}
+
+.icon-button--tip {
+  width: 30px;
+  height: 30px;
 }
 
 .icon-button--danger {
@@ -596,8 +671,14 @@ html.dark .icon-button--success:hover:not(:disabled) {
 .token-display {
   margin: 0;
   font-family:
-    ui-monospace, SFMono-Regular, SF Mono, Menlo, Monaco, Consolas,
-    "Liberation Mono", monospace;
+    ui-monospace,
+    SFMono-Regular,
+    SF Mono,
+    Menlo,
+    Monaco,
+    Consolas,
+    "Liberation Mono",
+    monospace;
   font-size: clamp(28px, 5vw, 34px);
   font-weight: 600;
   line-height: 1;

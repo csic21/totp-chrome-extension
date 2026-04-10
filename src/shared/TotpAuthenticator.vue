@@ -29,8 +29,13 @@ const editingIndex = ref<number | null>(null);
 const pendingDeleteIndex = ref<number | null>(null);
 const currentHostname = ref<string | undefined>();
 const isContentOverflowing = ref(false);
-const showIntroInfo = ref(false);
-const introInfoRef = ref<HTMLElement | null>(null);
+type InfoPopoverKey = "hero" | "accounts" | "pinned" | "refresh";
+
+const openInfoPopover = ref<InfoPopoverKey | null>(null);
+const heroInfoRef = ref<HTMLElement | null>(null);
+const accountsInfoRef = ref<HTMLElement | null>(null);
+const pinnedInfoRef = ref<HTMLElement | null>(null);
+const refreshInfoRef = ref<HTMLElement | null>(null);
 
 let intervalId: number | undefined;
 let copiedResetTimeoutId: number | undefined;
@@ -250,16 +255,30 @@ const openGitHub = () => {
   window.open("https://github.com/csic21/totp-chrome-extension", "_blank");
 };
 
-const toggleIntroInfo = () => {
-  showIntroInfo.value = !showIntroInfo.value;
+const toggleInfoPopover = (key: InfoPopoverKey) => {
+  if (openInfoPopover.value === key) {
+    openInfoPopover.value = null;
+    return;
+  }
+
+  openInfoPopover.value = key;
 };
 
 const handleClickOutside = (event: MouseEvent) => {
-  if (!showIntroInfo.value || !introInfoRef.value) return;
+  if (!openInfoPopover.value) return;
 
   const target = event.target as Node | null;
-  if (target && !introInfoRef.value.contains(target)) {
-    showIntroInfo.value = false;
+  const activeRoot =
+    openInfoPopover.value === "hero"
+      ? heroInfoRef.value
+      : openInfoPopover.value === "accounts"
+        ? accountsInfoRef.value
+        : openInfoPopover.value === "pinned"
+          ? pinnedInfoRef.value
+          : refreshInfoRef.value;
+
+  if (target && activeRoot && !activeRoot.contains(target)) {
+    openInfoPopover.value = null;
   }
 };
 
@@ -373,11 +392,11 @@ onUnmounted(() => {
           </div>
         </div>
 
-        <div ref="introInfoRef" class="info-trigger">
+        <div ref="heroInfoRef" class="info-trigger">
           <button
-            class="icon-button"
-            title="About this extension"
-            @click.stop="toggleIntroInfo"
+            class="icon-button icon-button--tip"
+            title="How it works"
+            @click.stop="toggleInfoPopover('hero')"
           >
             <svg
               xmlns="http://www.w3.org/2000/svg"
@@ -385,7 +404,7 @@ onUnmounted(() => {
               viewBox="0 0 24 24"
               stroke-width="1.5"
               stroke="currentColor"
-              class="size-4"
+              class="info-trigger__icon"
             >
               <path
                 stroke-linecap="round"
@@ -394,7 +413,7 @@ onUnmounted(() => {
               />
             </svg>
           </button>
-          <div v-if="showIntroInfo" class="info-popover">
+          <div v-if="openInfoPopover === 'hero'" class="info-popover">
             <p class="info-popover__title">How it works</p>
             <p class="info-popover__copy">
               Add secrets manually, scan QR codes, and pin accounts to the current
@@ -468,7 +487,7 @@ onUnmounted(() => {
     <div class="summary-grid">
       <div class="summary-card summary-card--domain">
         <div class="summary-card__label">Current Domain</div>
-        <div class="summary-card__value text-[18px] leading-tight">
+        <div class="summary-card__value summary-card__value--domain">
           {{ currentHostLabel }}
         </div>
         <div class="summary-card__meta">
@@ -512,24 +531,114 @@ onUnmounted(() => {
         </div>
       </div>
       <div class="summary-card">
-        <div class="summary-card__label">Accounts</div>
+        <div ref="accountsInfoRef" class="summary-card__header">
+          <div class="summary-card__label">Accounts</div>
+          <div class="info-trigger">
+            <button
+              class="icon-button icon-button--tip"
+              title="Accounts tips"
+              @click.stop="toggleInfoPopover('accounts')"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke-width="1.5"
+                stroke="currentColor"
+                class="info-trigger__icon"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  d="M12 9v3.75m0 3.75h.008v.008H12v-.008ZM21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"
+                />
+              </svg>
+            </button>
+          </div>
+          <div
+            v-if="openInfoPopover === 'accounts'"
+            class="info-popover info-popover--header-width info-popover--card-width"
+          >
+            <p class="info-popover__title">Accounts</p>
+            <p class="info-popover__copy">Stored securely in Chrome sync.</p>
+          </div>
+        </div>
         <div class="summary-card__value">{{ accountCount }}</div>
-        <div class="summary-card__meta">Stored securely in Chrome sync.</div>
       </div>
       <div class="summary-card">
-        <div class="summary-card__label">Pinned</div>
+        <div ref="pinnedInfoRef" class="summary-card__header">
+          <div class="summary-card__label">Pinned</div>
+          <div class="info-trigger">
+            <button
+              class="icon-button icon-button--tip"
+              title="Pinned tips"
+              @click.stop="toggleInfoPopover('pinned')"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke-width="1.5"
+                stroke="currentColor"
+                class="info-trigger__icon"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  d="M12 9v3.75m0 3.75h.008v.008H12v-.008ZM21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"
+                />
+              </svg>
+            </button>
+          </div>
+          <div
+            v-if="openInfoPopover === 'pinned'"
+            class="info-popover info-popover--header-width info-popover--card-width"
+          >
+            <p class="info-popover__title">Pinned</p>
+            <p class="info-popover__copy">Domain-aware sorting stays enabled.</p>
+          </div>
+        </div>
         <div class="summary-card__value">{{ pinnedCount }}</div>
-        <div class="summary-card__meta">Domain-aware sorting stays enabled.</div>
       </div>
     </div>
 
     <div class="surface-section mt-3 p-5 md:p-6">
       <div class="section-header">
-        <div>
-          <h2 class="section-title">Your Accounts</h2>
-          <p class="section-copy">
-            Tokens refresh automatically every 30 seconds.
-          </p>
+        <div ref="refreshInfoRef" class="section-header__main">
+          <div class="section-title-row">
+            <h2 class="section-title">Your Accounts</h2>
+            <div class="info-trigger">
+              <button
+                class="icon-button icon-button--tip"
+                title="Refresh info"
+                @click.stop="toggleInfoPopover('refresh')"
+              >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke-width="1.5"
+                  stroke="currentColor"
+                  class="info-trigger__icon"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    d="M12 9v3.75m0 3.75h.008v.008H12v-.008ZM21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"
+                />
+              </svg>
+            </button>
+            </div>
+            <div
+              v-if="openInfoPopover === 'refresh'"
+              class="info-popover info-popover--header-width info-popover--card-width"
+            >
+              <p class="info-popover__title">Refresh</p>
+              <p class="info-popover__copy">
+                Tokens refresh automatically every 30 seconds.
+              </p>
+            </div>
+          </div>
         </div>
         <div class="status-pill">
           <span class="status-pill__dot"></span>
