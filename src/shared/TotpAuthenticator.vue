@@ -387,7 +387,15 @@ onUnmounted(() => {
       <div class="topbar__header">
         <div class="hero-block">
           <div class="hero-label">
-            <img class="hero-label__logo" src="/icon-128.png" alt="" />
+            <img
+              class="hero-label__logo"
+              :src="
+                isDarkMode
+                  ? '/Vault_iOS_Label_Dark.svg'
+                  : '/Vault_iOS_Label.svg'
+              "
+              alt=""
+            />
             TOTP Authenticator
           </div>
         </div>

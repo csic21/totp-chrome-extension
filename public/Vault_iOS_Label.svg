@@ -1,0 +1,23 @@
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  viewBox="0 0 128 128"
+  width="128"
+  height="128"
+>
+  <defs>
+    <linearGradient id="label-ios-blue" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#00f2fe" />
+      <stop offset="100%" stop-color="#0071e3" />
+    </linearGradient>
+  </defs>
+
+  <circle cx="64" cy="64" r="64" fill="url(#label-ios-blue)" />
+  <circle cx="64" cy="64" r="40.75" fill="#ffffff" />
+
+  <g fill="url(#label-ios-blue)">
+    <circle cx="64" cy="52.125" r="10.875" />
+    <path
+      d="M 55.25 58.625 L 46.5 89.125 A 4.375 4.375 0 0 0 50.875 95 H 77.125 A 4.375 4.375 0 0 0 81.5 89.125 L 72.75 58.625 Z"
+    />
+  </g>
+</svg>
