@@ -31,21 +31,15 @@ const editingIndex = ref<number | null>(null);
 const pendingDeleteIndex = ref<number | null>(null);
 const currentHostname = ref<string | undefined>();
 const isContentOverflowing = ref(false);
-type InfoPopoverKey = "hero" | "accounts" | "pinned" | "refresh";
+type InfoPopoverKey = "hero" | "refresh";
 
 const openInfoPopover = ref<InfoPopoverKey | null>(null);
 const heroInfoRef = ref<HTMLElement | null>(null);
-const accountsInfoRef = ref<HTMLElement | null>(null);
-const pinnedInfoRef = ref<HTMLElement | null>(null);
 const refreshInfoRef = ref<HTMLElement | null>(null);
 
 let intervalId: number | undefined;
 let copiedResetTimeoutId: number | undefined;
 
-const accountCount = computed(() => accounts.value.length);
-const pinnedCount = computed(
-  () => accounts.value.filter((account) => Boolean(account.activePath)).length,
-);
 const activeHostCount = computed(
   () =>
     accounts.value.filter(
@@ -273,11 +267,7 @@ const handleClickOutside = (event: MouseEvent) => {
   const activeRoot =
     openInfoPopover.value === "hero"
       ? heroInfoRef.value
-      : openInfoPopover.value === "accounts"
-        ? accountsInfoRef.value
-        : openInfoPopover.value === "pinned"
-          ? pinnedInfoRef.value
-          : refreshInfoRef.value;
+      : refreshInfoRef.value;
 
   if (target && activeRoot && !activeRoot.contains(target)) {
     openInfoPopover.value = null;
@@ -490,7 +480,7 @@ onUnmounted(() => {
       </div>
     </div>
 
-    <div class="summary-grid">
+    <div v-if="currentDomainAccounts.length > 0" class="summary-grid">
       <div class="summary-card summary-card--domain">
         <div class="summary-card__label">Current Domain</div>
         <div class="summary-card__value summary-card__value--domain">
@@ -499,7 +489,7 @@ onUnmounted(() => {
         <div class="summary-card__meta">
           {{ activeHostCount }} pinned account(s) match this site.
         </div>
-        <div v-if="activeHostCount > 0" class="summary-card__actions">
+        <div class="summary-card__actions">
           <div class="summary-card__hint">
             <svg
               xmlns="http://www.w3.org/2000/svg"
@@ -535,76 +525,6 @@ onUnmounted(() => {
             </button>
           </div>
         </div>
-      </div>
-      <div class="summary-card">
-        <div ref="accountsInfoRef" class="summary-card__header">
-          <div class="summary-card__label">Accounts</div>
-          <div class="info-trigger">
-            <button
-              class="icon-button icon-button--tip icon-button--tip-compact"
-              title="Accounts tips"
-              @click.stop="toggleInfoPopover('accounts')"
-            >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke-width="1.5"
-                stroke="currentColor"
-                class="info-trigger__icon"
-              >
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  d="M12 9v3.75m0 3.75h.008v.008H12v-.008ZM21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"
-                />
-              </svg>
-            </button>
-          </div>
-          <div
-            v-if="openInfoPopover === 'accounts'"
-            class="info-popover info-popover--header-width info-popover--card-width"
-          >
-            <p class="info-popover__title">Accounts</p>
-            <p class="info-popover__copy">Stored securely in Chrome sync.</p>
-          </div>
-        </div>
-        <div class="summary-card__value">{{ accountCount }}</div>
-      </div>
-      <div class="summary-card">
-        <div ref="pinnedInfoRef" class="summary-card__header">
-          <div class="summary-card__label">Pinned</div>
-          <div class="info-trigger">
-            <button
-              class="icon-button icon-button--tip icon-button--tip-compact"
-              title="Pinned tips"
-              @click.stop="toggleInfoPopover('pinned')"
-            >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke-width="1.5"
-                stroke="currentColor"
-                class="info-trigger__icon"
-              >
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  d="M12 9v3.75m0 3.75h.008v.008H12v-.008ZM21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"
-                />
-              </svg>
-            </button>
-          </div>
-          <div
-            v-if="openInfoPopover === 'pinned'"
-            class="info-popover info-popover--header-width info-popover--card-width"
-          >
-            <p class="info-popover__title">Pinned</p>
-            <p class="info-popover__copy">Domain-aware sorting stays enabled.</p>
-          </div>
-        </div>
-        <div class="summary-card__value">{{ pinnedCount }}</div>
       </div>
     </div>
 
