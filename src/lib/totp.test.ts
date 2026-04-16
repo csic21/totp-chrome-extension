@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
 import {
   generateTotpToken,
   validateBase32Secret,
@@ -36,13 +36,16 @@ describe("TOTP Utility Functions", () => {
 
     const tokens = generateAllTokens(accounts);
 
-    expect(tokens).toHaveProperty(testSecret);
+    expect(tokens).toHaveLength(2);
     expect(tokens[0].token).toHaveLength(6);
+    expect(tokens[1].token).toHaveLength(6);
     // Since both accounts have the same secret, they will have the same token
-    expect(Object.keys(tokens)).toHaveLength(1);
+    expect(tokens[0].token).toBe(tokens[1].token);
   });
 
   it("should handle invalid secrets gracefully", () => {
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+
     const invalidSecret = "INVALID_SECRET!@#";
     const accounts = [
       { name: "valid", secret: testSecret },
@@ -52,6 +55,9 @@ describe("TOTP Utility Functions", () => {
     const tokens = generateAllTokens(accounts);
 
     expect(tokens[0].token).toHaveLength(6);
-    expect(tokens[0].token).toBe("Error");
+    expect(tokens[1].token).toBe("Error");
   });
 });
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });

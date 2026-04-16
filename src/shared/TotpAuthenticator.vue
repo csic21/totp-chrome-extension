@@ -11,6 +11,11 @@ import {
   validateBase32Secret,
   type TotpAccounts,
 } from "../lib/totp";
+import {
+  formatImportToastMessage,
+  type ScannedAccount,
+  type ScanImportSource,
+} from "../lib/qr-import";
 import QRCode from "qrcode";
 import {
   isDarkMode,
@@ -32,13 +37,19 @@ const pendingDeleteIndex = ref<number | null>(null);
 const currentHostname = ref<string | undefined>();
 const isContentOverflowing = ref(false);
 type InfoPopoverKey = "hero" | "refresh";
+type ToastVariant = "success" | "error";
 
 const openInfoPopover = ref<InfoPopoverKey | null>(null);
 const heroInfoRef = ref<HTMLElement | null>(null);
 const refreshInfoRef = ref<HTMLElement | null>(null);
+const toast = ref<{ id: number; message: string; variant: ToastVariant } | null>(
+  null,
+);
 
 let intervalId: number | undefined;
 let copiedResetTimeoutId: number | undefined;
+let toastTimeoutId: number | undefined;
+let toastId = 0;
 
 const activeHostCount = computed(
   () =>
@@ -118,6 +129,26 @@ const getStorageAccounts = async () => {
     })) || [];
 };
 
+const cloneAccounts = (items: TotpAccounts): TotpAccounts =>
+  items.map((account) => ({ ...account }));
+
+const showToast = (message: string, variant: ToastVariant = "success") => {
+  if (toastTimeoutId) {
+    clearTimeout(toastTimeoutId);
+  }
+
+  toast.value = {
+    id: ++toastId,
+    message,
+    variant,
+  };
+
+  toastTimeoutId = window.setTimeout(() => {
+    toast.value = null;
+    toastTimeoutId = undefined;
+  }, 2600);
+};
+
 const loadAccounts = async () => {
   try {
     currentHostname.value = await getCurrentTabHostname();
@@ -146,9 +177,26 @@ const saveAccounts = async () => {
     });
     await getStorageAccounts();
     sorterAccounts();
+    return true;
   } catch (error) {
     console.error("Error saving accounts:", error);
+    showToast("Unable to save your changes, please try again", "error");
+    return false;
   }
+};
+
+const persistAccounts = async (nextAccounts: TotpAccounts) => {
+  const previousAccounts = cloneAccounts(accounts.value);
+  accounts.value = cloneAccounts(nextAccounts);
+
+  const saved = await saveAccounts();
+  if (saved) {
+    return true;
+  }
+
+  accounts.value = previousAccounts;
+  sorterAccounts();
+  return false;
 };
 
 const handleAccountAdded = async ({
@@ -165,11 +213,11 @@ const handleAccountAdded = async ({
     return;
   }
 
-  accounts.value.push({ name, secret });
-  cancelEdit();
-  await saveAccounts();
-  updateAllTokens();
+  const saved = await persistAccounts([...accounts.value, { name, secret }]);
+  if (!saved) return;
+
   isModalOpen.value = false;
+  showToast(`Added ${name}`);
 };
 
 const handleAccountUpdated = async ({
@@ -182,40 +230,54 @@ const handleAccountUpdated = async ({
   if (editingIndex.value === null) return;
 
   const currentAccount = accounts.value[editingIndex.value];
-  accounts.value[editingIndex.value] = {
+  const nextAccounts = cloneAccounts(accounts.value);
+  nextAccounts[editingIndex.value] = {
     ...currentAccount,
     name,
     secret: secret || currentAccount.secret,
   };
-  await saveAccounts();
-  updateAllTokens();
+
+  const saved = await persistAccounts(nextAccounts);
+  if (!saved) return;
+
   cancelEdit();
+  showToast(`Updated ${name}`);
 };
 
 const handleQrScanSuccess = async ({
-  name,
-  secret,
+  accounts: scannedAccounts,
+  source,
 }: {
-  name: string;
-  secret: string;
+  accounts: ScannedAccount[];
+  source: ScanImportSource;
 }) => {
-  if (!validateBase32Secret(secret)) {
+  if (
+    scannedAccounts.length === 0 ||
+    scannedAccounts.some((account) => !validateBase32Secret(account.secret))
+  ) {
     alert(
       "Invalid secret key format. Please enter a valid Base32 encoded secret.",
     );
     return;
   }
 
-  handleAccountAdded({ name, secret });
+  const saved = await persistAccounts([...accounts.value, ...scannedAccounts]);
+  if (!saved) return;
+
   isQrScannerOpen.value = false;
+
+  showToast(formatImportToastMessage(scannedAccounts, source));
 };
 
 const deleteAccount = async (index: number) => {
-  accounts.value = accounts.value.filter((_, i) => i !== index);
-  delete currentTokens.value[index];
+  const accountName = accounts.value[index]?.name || "account";
   cancelEdit();
-  await saveAccounts();
-  updateAllTokens();
+  const saved = await persistAccounts(
+    accounts.value.filter((_, itemIndex) => itemIndex !== index),
+  );
+  if (!saved) return;
+
+  showToast(`Deleted ${accountName}`);
 };
 
 const requestDeleteAccount = (index: number) => {
@@ -278,14 +340,22 @@ const startEditing = (index: number) => {
   editingIndex.value = index;
 };
 
-const focusHostName = (index: number) => {
-  accounts.value[index].activePath = currentHostname.value;
-  saveAccounts();
+const focusHostName = async (index: number) => {
+  const nextAccounts = cloneAccounts(accounts.value);
+  nextAccounts[index].activePath = currentHostname.value;
+  const saved = await persistAccounts(nextAccounts);
+  if (!saved) return;
+
+  showToast("Pinned to the current domain");
 };
 
-const unFocusHostName = (index: number) => {
-  accounts.value[index].activePath = undefined;
-  saveAccounts();
+const unFocusHostName = async (index: number) => {
+  const nextAccounts = cloneAccounts(accounts.value);
+  nextAccounts[index].activePath = undefined;
+  const saved = await persistAccounts(nextAccounts);
+  if (!saved) return;
+
+  showToast("Removed domain pin");
 };
 
 const cancelEdit = () => {
@@ -364,6 +434,9 @@ onUnmounted(() => {
   }
   if (copiedResetTimeoutId) {
     clearTimeout(copiedResetTimeoutId);
+  }
+  if (toastTimeoutId) {
+    clearTimeout(toastTimeoutId);
   }
   document.removeEventListener("click", handleClickOutside);
   window.removeEventListener("resize", checkContentOverflow);
@@ -804,6 +877,55 @@ onUnmounted(() => {
           </div>
         </div>
       </div>
+    </Teleport>
+
+    <Teleport to="body">
+      <Transition name="toast">
+        <div
+          v-if="toast"
+          :key="toast.id"
+          class="toast-viewport"
+          aria-atomic="true"
+          aria-live="polite"
+          role="status"
+        >
+          <div class="toast" :class="`toast--${toast.variant}`">
+            <span class="toast__icon" aria-hidden="true">
+              <svg
+                v-if="toast.variant === 'success'"
+                xmlns="http://www.w3.org/2000/svg"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke-width="1.5"
+                stroke="currentColor"
+                class="size-4"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  d="m4.5 12.75 6 6 9-13.5"
+                />
+              </svg>
+              <svg
+                v-else
+                xmlns="http://www.w3.org/2000/svg"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke-width="1.5"
+                stroke="currentColor"
+                class="size-4"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  d="M12 9v3.75m0 3.75h.008v.008H12v-.008Zm9-3.758a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"
+                />
+              </svg>
+            </span>
+            <span class="toast__message">{{ toast.message }}</span>
+          </div>
+        </div>
+      </Transition>
     </Teleport>
 
     <Teleport to="body">

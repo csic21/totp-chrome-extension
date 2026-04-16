@@ -1,8 +1,11 @@
 <script setup lang="ts">
 import { ref } from "vue";
 import jsQR from "jsqr";
-import base32Encode from "base32-encode";
-import { MigrationPayload } from "../lib/google-migration";
+import {
+  parseGoogleMigrationPayload,
+  parseQrImportData,
+  type ScannedAccount,
+} from "../lib/qr-import";
 
 defineProps({
   isDarkMode: {
@@ -11,7 +14,16 @@ defineProps({
   },
 });
 
-const emit = defineEmits(["scan-success", "close"]);
+const emit = defineEmits<{
+  (
+    e: "scan-success",
+    payload: {
+      accounts: ScannedAccount[];
+      source: "qr" | "migration";
+    },
+  ): void;
+  (e: "close"): void;
+}>();
 const fileInput = ref<HTMLInputElement | null>(null);
 const errorMessage = ref("");
 const isProcessing = ref(false);
@@ -109,56 +121,31 @@ const scanCurrentTab = async () => {
 };
 
 const handleGoogleMigration = (data: string) => {
-  const buffer = Uint8Array.from(atob(data), (c) => c.charCodeAt(0));
-  const payload = MigrationPayload.deserializeBinary(buffer);
-  payload.toObject().otp_parameters?.forEach((element) => {
-    if (element.secret) {
-      const secret = base32Encode(element.secret as Uint8Array, "RFC4648", {
-        padding: false,
-      });
-      const name = element.issuer
-        ? `${element.issuer}: ${element.name}`
-        : element.name;
-      emit("scan-success", {
-        name,
-        secret,
-      });
-    }
+  const importedAccounts = parseGoogleMigrationPayload(data);
+
+  if (importedAccounts.length === 0) {
+    errorMessage.value =
+      "No TOTP accounts were found in the Google Authenticator export";
+    return;
+  }
+
+  emit("scan-success", {
+    accounts: importedAccounts,
+    source: "migration",
   });
 };
 
 const handleQrCodeResult = (data: string) => {
   try {
-    const url = new URL(data);
-    if (url.protocol === "otpauth:" && url.hostname === "totp") {
-      const issuerAndAccount = url.pathname.substring(1);
-      const params = new URLSearchParams(url.search);
-      const secret = params.get("secret");
+    const parsedImport = parseQrImportData(data);
 
-      if (secret) {
-        let issuer = "";
-        let account = issuerAndAccount;
-
-        if (issuerAndAccount.includes(":")) {
-          [issuer, account] = issuerAndAccount.split(":", 2);
-        }
-
-        if (params.get("issuer")) {
-          issuer = params.get("issuer") || "";
-        }
-
-        const name = issuer ? `${issuer}: ${account}` : account;
-
-        emit("scan-success", {
-          name,
-          secret,
-        });
-        return;
-      }
+    if (parsedImport?.source === "migration") {
+      handleGoogleMigration(new URL(data).searchParams.get("data") || "");
+      return;
     }
 
-    if (url.protocol === "otpauth-migration:") {
-      handleGoogleMigration(url.searchParams.get("data") || "");
+    if (parsedImport) {
+      emit("scan-success", parsedImport);
       return;
     }
 

@@ -958,6 +958,76 @@ html.dark .pill-button--primary:hover:not(:disabled) {
   background: var(--surface-muted);
 }
 
+.toast-viewport {
+  position: fixed;
+  left: 50%;
+  top: 24px;
+  z-index: 80;
+  width: min(calc(100vw - 32px), 360px);
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.toast {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--surface-border);
+  border-radius: 20px;
+  background: var(--panel-bg);
+  color: var(--app-text);
+  box-shadow: var(--shadow-card);
+  backdrop-filter: saturate(180%) blur(22px);
+}
+
+.toast__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  flex: 0 0 auto;
+  border-radius: 999px;
+}
+
+.toast--success .toast__icon {
+  background: rgba(31, 157, 85, 0.14);
+  color: var(--success);
+}
+
+.toast--error .toast__icon {
+  background: rgba(217, 45, 32, 0.12);
+  color: var(--danger);
+}
+
+html.dark .toast--success .toast__icon {
+  background: rgba(50, 179, 123, 0.18);
+}
+
+html.dark .toast--error .toast__icon {
+  background: rgba(255, 107, 99, 0.16);
+}
+
+.toast__message {
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.45;
+}
+
+.toast-enter-active,
+.toast-leave-active {
+  transition:
+    opacity 180ms ease,
+    transform 180ms ease;
+}
+
+.toast-enter-from,
+.toast-leave-to {
+  opacity: 0;
+  transform: translateX(-50%) translateY(-10px);
+}
+
 .tooltip {
   position: absolute;
   left: 50%;
