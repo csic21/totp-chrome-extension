@@ -368,9 +368,15 @@ html.dark .summary-card__hint {
   background: var(--surface-bg);
   color: var(--app-text);
   text-align: left;
+  transition:
+    transform 180ms ease,
+    background-color 180ms ease,
+    border-color 180ms ease,
+    color 180ms ease;
 }
 
 .summary-card__choice:hover:not(:disabled) {
+  transform: translateY(-1px);
   background: var(--surface-strong);
 }
 
