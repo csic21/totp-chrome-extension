@@ -33,6 +33,7 @@ const showIntroInfo = ref(false);
 const introInfoRef = ref<HTMLElement | null>(null);
 
 let intervalId: number | undefined;
+let copiedResetTimeoutId: number | undefined;
 
 const accountCount = computed(() => accounts.value.length);
 const pinnedCount = computed(
@@ -286,8 +287,14 @@ const copyToClipboard = async (index: number, text: string) => {
   try {
     await navigator.clipboard.writeText(text);
     copiedIndex.value = index;
-    setTimeout(() => {
+
+    if (copiedResetTimeoutId) {
+      clearTimeout(copiedResetTimeoutId);
+    }
+
+    copiedResetTimeoutId = window.setTimeout(() => {
       copiedIndex.value = null;
+      copiedResetTimeoutId = undefined;
     }, 2000);
   } catch (err) {
     console.error("Failed to copy: ", err);
@@ -343,6 +350,9 @@ onMounted(() => {
 onUnmounted(() => {
   if (intervalId) {
     clearInterval(intervalId);
+  }
+  if (copiedResetTimeoutId) {
+    clearTimeout(copiedResetTimeoutId);
   }
   document.removeEventListener("click", handleClickOutside);
   window.removeEventListener("resize", checkContentOverflow);
