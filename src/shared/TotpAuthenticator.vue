@@ -26,9 +26,10 @@ const selectedAccountForQR = ref<{ name: string; secret: string } | null>(null);
 const qrCodeDataUrl = ref("");
 const copiedIndex = ref<number | null>(null);
 const editingIndex = ref<number | null>(null);
-const editedName = ref("");
 const currentHostname = ref<string | undefined>();
 const isContentOverflowing = ref(false);
+const showIntroInfo = ref(false);
+const introInfoRef = ref<HTMLElement | null>(null);
 
 let intervalId: number | undefined;
 
@@ -163,6 +164,33 @@ const handleAccountAdded = async ({
   isModalOpen.value = false;
 };
 
+const handleAccountUpdated = async ({
+  name,
+  secret,
+}: {
+  name: string;
+  secret: string;
+}) => {
+  if (editingIndex.value === null) return;
+
+  if (!validateBase32Secret(secret)) {
+    alert(
+      "Invalid secret key format. Please enter a valid Base32 encoded secret.",
+    );
+    return;
+  }
+
+  const currentAccount = accounts.value[editingIndex.value];
+  accounts.value[editingIndex.value] = {
+    ...currentAccount,
+    name,
+    secret,
+  };
+  await saveAccounts();
+  updateAllTokens();
+  cancelEdit();
+};
+
 const handleQrScanSuccess = async ({
   name,
   secret,
@@ -206,9 +234,21 @@ const openGitHub = () => {
   window.open("https://github.com/csic21/totp-chrome-extension", "_blank");
 };
 
-const startEditing = (index: number, currentName: string) => {
+const toggleIntroInfo = () => {
+  showIntroInfo.value = !showIntroInfo.value;
+};
+
+const handleClickOutside = (event: MouseEvent) => {
+  if (!showIntroInfo.value || !introInfoRef.value) return;
+
+  const target = event.target as Node | null;
+  if (target && !introInfoRef.value.contains(target)) {
+    showIntroInfo.value = false;
+  }
+};
+
+const startEditing = (index: number) => {
   editingIndex.value = index;
-  editedName.value = currentName;
 };
 
 const focusHostName = (index: number) => {
@@ -221,22 +261,8 @@ const unFocusHostName = (index: number) => {
   saveAccounts();
 };
 
-const saveEdit = async () => {
-  if (editingIndex.value === null) return;
-
-  if (!editedName.value.trim()) {
-    alert("Account name cannot be empty.");
-    return;
-  }
-
-  accounts.value[editingIndex.value].name = editedName.value.trim();
-  await saveAccounts();
-  cancelEdit();
-};
-
 const cancelEdit = () => {
   editingIndex.value = null;
-  editedName.value = "";
 };
 
 const copyToClipboard = async (index: number, text: string) => {
@@ -291,6 +317,7 @@ const closeQRCode = () => {
 onMounted(() => {
   loadAccounts();
   intervalId = setInterval(updateAllTokens, 1000) as unknown as number;
+  document.addEventListener("click", handleClickOutside);
 
   nextTick(() => {
     checkContentOverflow();
@@ -302,6 +329,7 @@ onUnmounted(() => {
   if (intervalId) {
     clearInterval(intervalId);
   }
+  document.removeEventListener("click", handleClickOutside);
   window.removeEventListener("resize", checkContentOverflow);
 });
 </script>
@@ -312,16 +340,43 @@ onUnmounted(() => {
     :class="{ 'auth-shell--scroll': isContentOverflowing }"
   >
     <div class="topbar">
-      <div class="hero-block">
-        <div class="hero-label">
-          <span class="status-pill__dot"></span>
-          TOTP Authenticator
+      <div class="topbar__header">
+        <div class="hero-block">
+          <div class="hero-label">
+            <span class="status-pill__dot"></span>
+            TOTP Authenticator
+          </div>
         </div>
-        <h1 class="hero-title">Codes ready for the page you are on.</h1>
-        <p class="hero-subtitle">
-          Add secrets manually, scan QR codes, and keep the active domain pinned
-          to the top without changing how the extension works.
-        </p>
+
+        <div ref="introInfoRef" class="info-trigger">
+          <button
+            class="icon-button"
+            title="About this extension"
+            @click.stop="toggleIntroInfo"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke-width="1.5"
+              stroke="currentColor"
+              class="size-4"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                d="M12 9v3.75m0 3.75h.008v.008H12v-.008ZM21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"
+              />
+            </svg>
+          </button>
+          <div v-if="showIntroInfo" class="info-popover">
+            <p class="info-popover__title">How it works</p>
+            <p class="info-popover__copy">
+              Add secrets manually, scan QR codes, and pin accounts to the current
+              domain so the right codes stay at the top when you need to copy them.
+            </p>
+          </div>
+        </div>
       </div>
 
       <div class="topbar__actions">
@@ -469,212 +524,168 @@ onUnmounted(() => {
           :key="index + account.name + account.secret"
           class="account-card"
         >
-          <div v-if="editingIndex === index" class="account-edit">
-            <input
-              v-model="editedName"
-              type="text"
-              class="field-input"
-              @keyup.enter="saveEdit"
-              @keyup.esc="cancelEdit"
-            />
-            <button class="icon-button icon-button--success" @click="saveEdit">
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke-width="1.5"
-                stroke="currentColor"
-                class="size-4"
+          <div class="account-card__top">
+            <div class="account-card__token-group">
+              <button
+                class="icon-button"
+                :disabled="
+                  !currentTokens[index]?.token ||
+                  currentTokens[index]?.token === 'Error'
+                "
+                title="Copy to clipboard"
+                @click="copyToClipboard(index, currentTokens[index]?.token)"
               >
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  d="m4.5 12.75 6 6 9-13.5"
-                />
-              </svg>
-            </button>
-            <button class="icon-button" @click="cancelEdit">
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke-width="1.5"
-                stroke="currentColor"
-                class="size-4"
-              >
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  d="M6 18 18 6M6 6l12 12"
-                />
-              </svg>
-            </button>
-          </div>
-
-          <template v-else>
-            <div class="account-card__top">
-              <div class="account-card__token-group">
-                <button
-                  class="icon-button"
-                  :disabled="
-                    !currentTokens[index]?.token ||
-                    currentTokens[index]?.token === 'Error'
-                  "
-                  title="Copy to clipboard"
-                  @click="copyToClipboard(index, currentTokens[index]?.token)"
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke-width="1.5"
+                  stroke="currentColor"
+                  class="size-5"
                 >
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke-width="1.5"
-                    stroke="currentColor"
-                    class="size-5"
-                  >
-                    <path
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                      d="M15.75 17.25v3.375c0 .621-.504 1.125-1.125 1.125h-9.75a1.125 1.125 0 0 1-1.125-1.125V7.875c0-.621.504-1.125 1.125-1.125H6.75a9.06 9.06 0 0 1 1.5.124m7.5 10.376h3.375c.621 0 1.125-.504 1.125-1.125V11.25c0-4.46-3.243-8.161-7.5-8.876a9.06 9.06 0 0 0-1.5-.124H9.375c-.621 0-1.125.504-1.125 1.125v3.5m7.5 10.375H9.375a1.125 1.125 0 0 1-1.125-1.125v-9.25m12 6.625v-1.875a3.375 3.375 0 0 0-3.375-3.375h-1.5a1.125 1.125 0 0 1-1.125-1.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H9.75"
-                    />
-                  </svg>
-                  <span v-if="copiedIndex === index" class="tooltip">Copied</span>
-                </button>
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    d="M15.75 17.25v3.375c0 .621-.504 1.125-1.125 1.125h-9.75a1.125 1.125 0 0 1-1.125-1.125V7.875c0-.621.504-1.125 1.125-1.125H6.75a9.06 9.06 0 0 1 1.5.124m7.5 10.376h3.375c.621 0 1.125-.504 1.125-1.125V11.25c0-4.46-3.243-8.161-7.5-8.876a9.06 9.06 0 0 0-1.5-.124H9.375c-.621 0-1.125.504-1.125 1.125v3.5m7.5 10.375H9.375a1.125 1.125 0 0 1-1.125-1.125v-9.25m12 6.625v-1.875a3.375 3.375 0 0 0-3.375-3.375h-1.5a1.125 1.125 0 0 1-1.125-1.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H9.75"
+                  />
+                </svg>
+                <span v-if="copiedIndex === index" class="tooltip">Copied</span>
+              </button>
 
-                <div class="min-w-0">
-                  <p class="token-display">
-                    {{ currentTokens[index]?.token || "..." }}
-                  </p>
-                  <h3 class="account-card__name">{{ account.name }}</h3>
-                  <div
-                    v-if="account.activePath && account.activePath !== currentHostname"
-                    class="account-card__meta"
-                  >
-                    Pinned: {{ account.activePath }}
-                  </div>
+              <div class="min-w-0">
+                <p class="token-display">
+                  {{ currentTokens[index]?.token || "..." }}
+                </p>
+                <h3 class="account-card__name">{{ account.name }}</h3>
+                <div
+                  v-if="account.activePath && account.activePath !== currentHostname"
+                  class="account-card__meta"
+                >
+                  Pinned: {{ account.activePath }}
                 </div>
               </div>
             </div>
+          </div>
 
-            <div class="account-card__actions">
-              <div class="account-card__actions-main">
-                <button
-                  class="icon-button"
-                  title="Show QR code"
-                  @click="generateQRCode(account.name, account.secret)"
+          <div class="account-card__actions">
+            <div class="account-card__actions-main">
+              <button
+                class="icon-button"
+                title="Show QR code"
+                @click="generateQRCode(account.name, account.secret)"
+              >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke-width="1.5"
+                  stroke="currentColor"
+                  class="size-4"
                 >
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke-width="1.5"
-                    stroke="currentColor"
-                    class="size-4"
-                  >
-                    <path
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                      d="M3.75 4.875c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v4.5c0 .621-.504 1.125-1.125 1.125h-4.5A1.125 1.125 0 0 1 3.75 9.375v-4.5ZM3.75 14.625c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v4.5c0 .621-.504 1.125-1.125 1.125h-4.5a1.125 1.125 0 0 1-1.125-1.125v-4.5ZM13.5 4.875c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v4.5c0 .621-.504 1.125-1.125 1.125h-4.5A1.125 1.125 0 0 1 13.5 9.375v-4.5Z"
-                    />
-                    <path
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                      d="M6.75 6.75h.75v.75h-.75v-.75ZM6.75 16.5h.75v.75h-.75v-.75ZM16.5 6.75h.75v.75h-.75v-.75ZM13.5 13.5h.75v.75h-.75v-.75ZM13.5 19.5h.75v.75h-.75v-.75ZM19.5 13.5h.75v.75h-.75v-.75ZM19.5 19.5h.75v.75h-.75v-.75ZM16.5 16.5h.75v.75h-.75v-.75Z"
-                    />
-                  </svg>
-                </button>
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    d="M3.75 4.875c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v4.5c0 .621-.504 1.125-1.125 1.125h-4.5A1.125 1.125 0 0 1 3.75 9.375v-4.5ZM3.75 14.625c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v4.5c0 .621-.504 1.125-1.125 1.125h-4.5a1.125 1.125 0 0 1-1.125-1.125v-4.5ZM13.5 4.875c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v4.5c0 .621-.504 1.125-1.125 1.125h-4.5A1.125 1.125 0 0 1 13.5 9.375v-4.5Z"
+                  />
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    d="M6.75 6.75h.75v.75h-.75v-.75ZM6.75 16.5h.75v.75h-.75v-.75ZM16.5 6.75h.75v.75h-.75v-.75ZM13.5 13.5h.75v.75h-.75v-.75ZM13.5 19.5h.75v.75h-.75v-.75ZM19.5 13.5h.75v.75h-.75v-.75ZM19.5 19.5h.75v.75h-.75v-.75ZM16.5 16.5h.75v.75h-.75v-.75Z"
+                  />
+                </svg>
+              </button>
 
-                <button
-                  class="icon-button"
-                  title="Edit name"
-                  @click="startEditing(index, account.name)"
+              <button
+                class="icon-button"
+                title="Edit account"
+                @click="startEditing(index)"
+              >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke-width="1.5"
+                  stroke="currentColor"
+                  class="size-4"
                 >
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke-width="1.5"
-                    stroke="currentColor"
-                    class="size-4"
-                  >
-                    <path
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                      d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0 1 15.75 21H5.25A2.25 2.25 0 0 1 3 18.75V8.25A2.25 2.25 0 0 1 5.25 6H10"
-                    />
-                  </svg>
-                </button>
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0 1 15.75 21H5.25A2.25 2.25 0 0 1 3 18.75V8.25A2.25 2.25 0 0 1 5.25 6H10"
+                  />
+                </svg>
+              </button>
 
-                <button
-                  class="icon-button icon-button--danger"
-                  title="Delete account"
-                  @click="deleteAccount(index)"
+              <button
+                class="icon-button icon-button--danger"
+                title="Delete account"
+                @click="deleteAccount(index)"
+              >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke-width="1.5"
+                  stroke="currentColor"
+                  class="size-4"
                 >
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke-width="1.5"
-                    stroke="currentColor"
-                    class="size-4"
-                  >
-                    <path
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                      d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0"
-                    />
-                  </svg>
-                </button>
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0"
+                  />
+                </svg>
+              </button>
 
-                <button
-                  v-if="account.activePath !== currentHostname"
-                  class="icon-button"
-                  title="Pin the current domain name"
-                  @click="focusHostName(index)"
+              <button
+                v-if="account.activePath !== currentHostname"
+                class="icon-button"
+                title="Pin the current domain name"
+                @click="focusHostName(index)"
+              >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke-width="1.5"
+                  stroke="currentColor"
+                  class="size-4"
                 >
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke-width="1.5"
-                    stroke="currentColor"
-                    class="size-4"
-                  >
-                    <path
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                      d="M13.181 8.68a4.503 4.503 0 0 1 1.903 6.405m-9.768-2.782L3.56 14.06a4.5 4.5 0 0 0 6.364 6.365l3.129-3.129m5.614-5.615 1.757-1.757a4.5 4.5 0 0 0-6.364-6.365l-4.5 4.5c-.258.26-.479.541-.661.84m1.903 6.405a4.495 4.495 0 0 1-1.242-.88 4.483 4.483 0 0 1-1.062-1.683m6.587 2.345 5.907 5.907m-5.907-5.907L8.898 8.898M2.991 2.99 8.898 8.9"
-                    />
-                  </svg>
-                </button>
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    d="M13.181 8.68a4.503 4.503 0 0 1 1.903 6.405m-9.768-2.782L3.56 14.06a4.5 4.5 0 0 0 6.364 6.365l3.129-3.129m5.614-5.615 1.757-1.757a4.5 4.5 0 0 0-6.364-6.365l-4.5 4.5c-.258.26-.479.541-.661.84m1.903 6.405a4.495 4.495 0 0 1-1.242-.88 4.483 4.483 0 0 1-1.062-1.683m6.587 2.345 5.907 5.907m-5.907-5.907L8.898 8.898M2.991 2.99 8.898 8.9"
+                  />
+                </svg>
+              </button>
 
-                <button
-                  v-else
-                  class="icon-button icon-button--success"
-                  title="Unpin the current domain name"
-                  @click="unFocusHostName(index)"
+              <button
+                v-else
+                class="icon-button icon-button--success"
+                title="Unpin the current domain name"
+                @click="unFocusHostName(index)"
+              >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke-width="1.5"
+                  stroke="currentColor"
+                  class="size-4"
                 >
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke-width="1.5"
-                    stroke="currentColor"
-                    class="size-4"
-                  >
-                    <path
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                      d="M13.19 8.688a4.5 4.5 0 0 1 1.242 7.244l-4.5 4.5a4.5 4.5 0 0 1-6.364-6.364l1.757-1.757m13.35-.622 1.757-1.757a4.5 4.5 0 0 0-6.364-6.364l-4.5 4.5a4.5 4.5 0 0 0 1.242 7.244"
-                    />
-                  </svg>
-                </button>
-              </div>
-
-              <CircularProgress
-                :remaining-time="currentTokens[index]?.remainingTime"
-              />
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    d="M13.19 8.688a4.5 4.5 0 0 1 1.242 7.244l-4.5 4.5a4.5 4.5 0 0 1-6.364-6.364l1.757-1.757m13.35-.622 1.757-1.757a4.5 4.5 0 0 0-6.364-6.364l-4.5 4.5a4.5 4.5 0 0 0 1.242 7.244"
+                  />
+                </svg>
+              </button>
             </div>
-          </template>
+
+            <CircularProgress
+              :remaining-time="currentTokens[index]?.remainingTime"
+            />
+          </div>
         </div>
       </div>
     </div>
@@ -682,8 +693,18 @@ onUnmounted(() => {
     <AddAccountModal
       v-if="isModalOpen"
       :is-dark-mode="isDarkMode"
-      @add-account="handleAccountAdded"
+      @submit="handleAccountAdded"
       @close="isModalOpen = false"
+    />
+
+    <AddAccountModal
+      v-if="editingIndex !== null"
+      :is-dark-mode="isDarkMode"
+      mode="edit"
+      :initial-name="accounts[editingIndex]?.name || ''"
+      :initial-secret="accounts[editingIndex]?.secret || ''"
+      @submit="handleAccountUpdated"
+      @close="cancelEdit"
     />
 
     <QrScanner
