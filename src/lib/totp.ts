@@ -17,6 +17,42 @@ export interface TotpToken {
 
 export type TotpAccounts = TotpAccount[];
 
+export const DEFAULT_TOTP_PERIOD = 30;
+export const TIMER_BOUNDARY_BUFFER_MS = 20;
+
+export function getTotpRemainingTime(
+  timestamp: number = Date.now(),
+  period: number = DEFAULT_TOTP_PERIOD,
+): number {
+  return period - (Math.floor(timestamp / 1000) % period);
+}
+
+export function getTotpTimeStep(
+  timestamp: number = Date.now(),
+  period: number = DEFAULT_TOTP_PERIOD,
+): number {
+  return Math.floor(Math.floor(timestamp / 1000) / period);
+}
+
+export function shouldRefreshTotpTokens(
+  previousTimeStep: number | undefined,
+  timestamp: number = Date.now(),
+  period: number = DEFAULT_TOTP_PERIOD,
+): boolean {
+  return previousTimeStep !== getTotpTimeStep(timestamp, period);
+}
+
+export function getNextTotpTimerDelay(
+  timestamp: number = Date.now(),
+  boundaryBufferMs: number = TIMER_BOUNDARY_BUFFER_MS,
+): number {
+  const millisecondsIntoSecond = timestamp % 1000;
+  const millisecondsUntilNextSecond =
+    millisecondsIntoSecond === 0 ? 1000 : 1000 - millisecondsIntoSecond;
+
+  return millisecondsUntilNextSecond + boundaryBufferMs;
+}
+
 /**
  * Generate a TOTP token for a given account
  * @param secret The Base32 encoded secret
@@ -27,9 +63,10 @@ export type TotpAccounts = TotpAccount[];
  */
 export function generateTotpToken(
   secret: string,
-  period: number = 30,
+  period: number = DEFAULT_TOTP_PERIOD,
   digits: number = 6,
-  algorithm: string = "SHA1"
+  algorithm: string = "SHA1",
+  timestamp: number = Date.now(),
 ): TotpToken {
   try {
     const totp = new TOTP({
@@ -39,9 +76,8 @@ export function generateTotpToken(
       algorithm,
     });
 
-    const now = Date.now();
-    const token = totp.generate();
-    const remainingTime = totp.period - (Math.floor(now / 1000) % totp.period);
+    const token = totp.generate({ timestamp });
+    const remainingTime = getTotpRemainingTime(timestamp, totp.period);
 
     return { token, remainingTime };
   } catch (error) {
@@ -73,9 +109,11 @@ export function validateBase32Secret(secret: string): boolean {
  * @param accounts The accounts to generate tokens for
  * @returns An object mapping account secrets to their tokens and remaining times
  */
-export function generateAllTokens(accounts: TotpAccounts): TotpToken[] {
+export function generateAllTokens(
+  accounts: TotpAccounts,
+  timestamp: number = Date.now(),
+): TotpToken[] {
   const tokens: TotpToken[] = [];
-  const now = Date.now();
 
   for (const index in accounts) {
     try {
@@ -86,9 +124,8 @@ export function generateAllTokens(accounts: TotpAccounts): TotpToken[] {
         algorithm: "SHA1",
       });
 
-      const token = totp.generate();
-      const remainingTime =
-        totp.period - (Math.floor(now / 1000) % totp.period);
+      const token = totp.generate({ timestamp });
+      const remainingTime = getTotpRemainingTime(timestamp, totp.period);
 
       tokens[index] = { token, remainingTime };
     } catch (error) {

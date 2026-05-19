@@ -3,6 +3,10 @@ import {
   generateTotpToken,
   validateBase32Secret,
   generateAllTokens,
+  getTotpRemainingTime,
+  getTotpTimeStep,
+  getNextTotpTimerDelay,
+  shouldRefreshTotpTokens,
 } from "./totp";
 
 describe("TOTP Utility Functions", () => {
@@ -56,6 +60,30 @@ describe("TOTP Utility Functions", () => {
 
     expect(tokens[0].token).toHaveLength(6);
     expect(tokens[1].token).toBe("Error");
+  });
+
+  it("should refresh generated tokens only when the TOTP time step changes", () => {
+    const twelveSeconds = 12_000;
+    const twentyNineSeconds = 29_000;
+    const thirtySeconds = 30_000;
+
+    expect(getTotpTimeStep(twelveSeconds)).toBe(0);
+    expect(getTotpTimeStep(twentyNineSeconds)).toBe(0);
+    expect(getTotpTimeStep(thirtySeconds)).toBe(1);
+
+    expect(getTotpRemainingTime(twelveSeconds)).toBe(18);
+    expect(getTotpRemainingTime(twentyNineSeconds)).toBe(1);
+    expect(getTotpRemainingTime(thirtySeconds)).toBe(30);
+
+    expect(shouldRefreshTotpTokens(0, twentyNineSeconds)).toBe(false);
+    expect(shouldRefreshTotpTokens(0, thirtySeconds)).toBe(true);
+    expect(shouldRefreshTotpTokens(undefined, twelveSeconds)).toBe(true);
+  });
+
+  it("should schedule timer ticks just after the next second boundary", () => {
+    expect(getNextTotpTimerDelay(29_900)).toBe(120);
+    expect(getNextTotpTimerDelay(30_000)).toBe(1020);
+    expect(getNextTotpTimerDelay(30_999)).toBe(21);
   });
 });
   afterEach(() => {

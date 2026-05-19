@@ -1,28 +1,37 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, nextTick } from "vue";
+import {
+  ref,
+  computed,
+  onMounted,
+  onUnmounted,
+  nextTick,
+  defineAsyncComponent,
+} from "vue";
 import AddAccountModal from "../components/AddAccountModal.vue";
-import QrScanner from "../components/QrScanner.vue";
 import AddMenu from "../components/AddMenu.vue";
 import CircularProgress from "../components/CircularProgress.vue";
 import vaultLabelLight from "../assets/Vault_iOS_Label.svg";
 import vaultLabelDark from "../assets/Vault_iOS_Label_Dark.svg";
 import {
+  getTotpRemainingTime,
+  getTotpTimeStep,
+  getNextTotpTimerDelay,
   generateAllTokens,
+  shouldRefreshTotpTokens,
   validateBase32Secret,
   type TotpAccounts,
 } from "../lib/totp";
-import {
-  formatImportToastMessage,
-  type ScannedAccount,
-  type ScanImportSource,
-} from "../lib/qr-import";
-import QRCode from "qrcode";
+import type { ScannedAccount, ScanImportSource } from "../lib/qr-import";
 import {
   isDarkMode,
   isAutoMode,
   toggleTheme,
   toggleAutoMode,
 } from "../composables/useTheme";
+
+const QrScanner = defineAsyncComponent(
+  () => import("../components/QrScanner.vue"),
+);
 
 const accounts = ref<TotpAccounts>([]);
 const currentTokens = ref<{ token: string; remainingTime: number }[]>([]);
@@ -46,10 +55,11 @@ const toast = ref<{ id: number; message: string; variant: ToastVariant } | null>
   null,
 );
 
-let intervalId: number | undefined;
+let tokenTimerId: number | undefined;
 let copiedResetTimeoutId: number | undefined;
 let toastTimeoutId: number | undefined;
 let toastId = 0;
+let tokenTimeStep: number | undefined;
 
 const activeHostCount = computed(
   () =>
@@ -149,10 +159,26 @@ const showToast = (message: string, variant: ToastVariant = "success") => {
   }, 2600);
 };
 
+const formatImportToastMessage = (
+  importedAccounts: ScannedAccount[],
+  source: ScanImportSource,
+) => {
+  const isBatchImport = source === "migration" || importedAccounts.length > 1;
+
+  return isBatchImport
+    ? `Imported ${importedAccounts.length} account${
+        importedAccounts.length > 1 ? "s" : ""
+      }`
+    : `Imported ${importedAccounts[0].name}`;
+};
+
 const loadAccounts = async () => {
   try {
-    currentHostname.value = await getCurrentTabHostname();
-    await getStorageAccounts();
+    const [hostname] = await Promise.all([
+      getCurrentTabHostname(),
+      getStorageAccounts(),
+    ]);
+    currentHostname.value = hostname;
     sorterAccounts();
   } catch (error) {
     console.error("Error loading accounts:", error);
@@ -296,8 +322,31 @@ const confirmDeleteAccount = async () => {
   await deleteAccount(index);
 };
 
-const updateAllTokens = () => {
-  currentTokens.value = generateAllTokens(accounts.value);
+const updateAllTokens = (timestamp: number = Date.now()) => {
+  currentTokens.value = generateAllTokens(accounts.value, timestamp);
+  tokenTimeStep = getTotpTimeStep(timestamp);
+};
+
+const syncTokenTimers = () => {
+  const timestamp = Date.now();
+
+  if (shouldRefreshTotpTokens(tokenTimeStep, timestamp)) {
+    updateAllTokens(timestamp);
+    return;
+  }
+
+  const remainingTime = getTotpRemainingTime(timestamp);
+  currentTokens.value = currentTokens.value.map((token) => ({
+    ...token,
+    remainingTime: token.token === "Error" ? 0 : remainingTime,
+  }));
+};
+
+const scheduleTokenTimer = () => {
+  tokenTimerId = window.setTimeout(() => {
+    syncTokenTimers();
+    scheduleTokenTimer();
+  }, getNextTotpTimerDelay());
 };
 
 const checkContentOverflow = () => {
@@ -393,6 +442,7 @@ const copyCurrentDomainAccount = (index: number, token: string) => {
 
 const generateQRCode = async (name: string, secret: string) => {
   try {
+    const { default: QRCode } = await import("qrcode");
     const otpUri = `otpauth://totp/${encodeURIComponent(name)}?secret=${secret}&algorithm=SHA1&digits=6&period=30`;
     const dataUrl = await QRCode.toDataURL(otpUri, {
       width: 256,
@@ -419,7 +469,7 @@ const closeQRCode = () => {
 
 onMounted(() => {
   loadAccounts();
-  intervalId = setInterval(updateAllTokens, 1000) as unknown as number;
+  scheduleTokenTimer();
   document.addEventListener("click", handleClickOutside);
 
   nextTick(() => {
@@ -429,8 +479,8 @@ onMounted(() => {
 });
 
 onUnmounted(() => {
-  if (intervalId) {
-    clearInterval(intervalId);
+  if (tokenTimerId) {
+    clearTimeout(tokenTimerId);
   }
   if (copiedResetTimeoutId) {
     clearTimeout(copiedResetTimeoutId);
