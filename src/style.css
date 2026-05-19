@@ -553,6 +553,11 @@ html.dark .chrome-panel::before {
   height: 30px;
 }
 
+.icon-button--tip-compact {
+  width: 26px;
+  height: 26px;
+}
+
 .icon-button--danger {
   color: var(--danger);
 }
@@ -587,6 +592,12 @@ html.dark .icon-button--success:hover:not(:disabled) {
     background-color 180ms ease,
     border-color 180ms ease,
     color 180ms ease;
+}
+
+.pill-button--compact {
+  min-height: 38px;
+  height: 38px;
+  padding: 0 16px;
 }
 
 .pill-button:hover:not(:disabled) {
@@ -762,6 +773,11 @@ html.dark .icon-button--success:hover:not(:disabled) {
   border: 1px solid var(--surface-border);
   background: var(--surface-bg);
   box-shadow: var(--shadow-card);
+}
+
+.add-menu {
+  position: relative;
+  margin-left: auto;
 }
 
 .menu-item {

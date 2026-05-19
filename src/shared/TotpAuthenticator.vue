@@ -535,7 +535,7 @@ onUnmounted(() => {
           <div class="summary-card__label">Accounts</div>
           <div class="info-trigger">
             <button
-              class="icon-button icon-button--tip"
+              class="icon-button icon-button--tip icon-button--tip-compact"
               title="Accounts tips"
               @click.stop="toggleInfoPopover('accounts')"
             >
@@ -570,7 +570,7 @@ onUnmounted(() => {
           <div class="summary-card__label">Pinned</div>
           <div class="info-trigger">
             <button
-              class="icon-button icon-button--tip"
+              class="icon-button icon-button--tip icon-button--tip-compact"
               title="Pinned tips"
               @click.stop="toggleInfoPopover('pinned')"
             >
@@ -609,7 +609,7 @@ onUnmounted(() => {
             <h2 class="section-title">Your Accounts</h2>
             <div class="info-trigger">
               <button
-                class="icon-button icon-button--tip"
+                class="icon-button icon-button--tip icon-button--tip-compact"
                 title="Refresh info"
                 @click.stop="toggleInfoPopover('refresh')"
               >
