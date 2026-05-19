@@ -528,6 +528,15 @@ html.dark .chrome-panel::before {
   background: var(--surface-strong);
 }
 
+.pill-button--danger {
+  background: var(--danger);
+  color: #ffffff;
+}
+
+.pill-button--danger:hover:not(:disabled) {
+  background: #b42318;
+}
+
 .account-list {
   display: flex;
   flex-direction: column;
@@ -730,6 +739,10 @@ html.dark .chrome-panel::before {
 
 .form-actions > * {
   flex: 1;
+}
+
+.form-actions--stacked {
+  flex-direction: column;
 }
 
 .dropzone {

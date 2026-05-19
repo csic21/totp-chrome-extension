@@ -26,6 +26,7 @@ const selectedAccountForQR = ref<{ name: string; secret: string } | null>(null);
 const qrCodeDataUrl = ref("");
 const copiedIndex = ref<number | null>(null);
 const editingIndex = ref<number | null>(null);
+const pendingDeleteIndex = ref<number | null>(null);
 const currentHostname = ref<string | undefined>();
 const isContentOverflowing = ref(false);
 const showIntroInfo = ref(false);
@@ -54,6 +55,11 @@ const currentDomainAccounts = computed(() =>
       token: currentTokens.value[index]?.token,
     }))
     .filter((item) => item.account.activePath === currentHostname.value),
+);
+const pendingDeleteAccount = computed(() =>
+  pendingDeleteIndex.value !== null
+    ? accounts.value[pendingDeleteIndex.value] || null
+    : null,
 );
 
 const getCurrentTabHostname = async (): Promise<string | undefined> => {
@@ -215,6 +221,22 @@ const deleteAccount = async (index: number) => {
   cancelEdit();
   await saveAccounts();
   updateAllTokens();
+};
+
+const requestDeleteAccount = (index: number) => {
+  pendingDeleteIndex.value = index;
+};
+
+const cancelDeleteAccount = () => {
+  pendingDeleteIndex.value = null;
+};
+
+const confirmDeleteAccount = async () => {
+  if (pendingDeleteIndex.value === null) return;
+
+  const index = pendingDeleteIndex.value;
+  pendingDeleteIndex.value = null;
+  await deleteAccount(index);
 };
 
 const updateAllTokens = () => {
@@ -616,11 +638,11 @@ onUnmounted(() => {
                 </svg>
               </button>
 
-              <button
-                class="icon-button icon-button--danger"
-                title="Delete account"
-                @click="deleteAccount(index)"
-              >
+                <button
+                  class="icon-button icon-button--danger"
+                  title="Delete account"
+                  @click="requestDeleteAccount(index)"
+                >
                 <svg
                   xmlns="http://www.w3.org/2000/svg"
                   fill="none"
@@ -713,6 +735,39 @@ onUnmounted(() => {
       @scan-success="handleQrScanSuccess"
       @close="isQrScannerOpen = false"
     />
+
+    <Teleport to="body">
+      <div
+        v-if="pendingDeleteIndex !== null"
+        class="modal-backdrop"
+        @click.self="cancelDeleteAccount"
+      >
+        <div class="modal-card">
+          <h3 class="modal-title">Delete Account?</h3>
+          <p class="modal-copy">
+            This will remove
+            <strong>{{ pendingDeleteAccount?.name || "this account" }}</strong>
+            from your saved TOTP list.
+          </p>
+          <p class="modal-copy">This action cannot be undone.</p>
+
+          <div class="form-actions form-actions--stacked">
+            <button
+              class="pill-button pill-button--danger"
+              @click="confirmDeleteAccount"
+            >
+              Delete
+            </button>
+            <button
+              class="pill-button pill-button--secondary"
+              @click="cancelDeleteAccount"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
 
     <Teleport to="body">
       <div
