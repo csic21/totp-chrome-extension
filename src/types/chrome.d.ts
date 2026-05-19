@@ -1,1 +1,1 @@
-// Chrome extension types
+/// <reference types="chrome" />
