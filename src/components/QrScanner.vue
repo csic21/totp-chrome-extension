@@ -1,14 +1,14 @@
 <script setup lang="ts">
-import { ref, computed } from "vue";
+import { ref } from "vue";
 import jsQR from "jsqr";
 import base32Encode from "base32-encode";
 import { MigrationPayload } from "../lib/google-migration";
 
-const props = defineProps({
+defineProps({
   isDarkMode: {
     type: Boolean,
-    default: false
-  }
+    default: false,
+  },
 });
 
 const emit = defineEmits(["scan-success", "close"]);
@@ -16,24 +16,10 @@ const fileInput = ref<HTMLInputElement | null>(null);
 const errorMessage = ref("");
 const isProcessing = ref(false);
 
-// Theme classes
-const backgroundColor = computed(() => props.isDarkMode ? 'bg-gray-900' : 'bg-white');
-const textColor = computed(() => props.isDarkMode ? 'text-gray-200' : 'text-gray-700');
-const borderColor = computed(() => props.isDarkMode ? 'border-gray-700' : 'border-gray-300');
-const hoverBorderColor = computed(() => props.isDarkMode ? 'hover:border-gray-600' : 'hover:border-gray-400');
-const processingSpinnerColor = computed(() => props.isDarkMode ? 'border-gray-300' : 'border-gray-700');
-const errorMessageColor = computed(() => props.isDarkMode ? 'text-red-400' : 'text-red-500');
-const infoTextColor = computed(() => props.isDarkMode ? 'text-gray-400' : 'text-gray-600');
-const cancelButtonColor = computed(() => props.isDarkMode ? 'bg-gray-700 text-gray-200 hover:bg-gray-600 focus:ring-gray-500' : 'bg-gray-200 text-gray-700 hover:bg-gray-300 focus:ring-gray-500');
-
-// Trigger file selection
 function triggerFileSelect() {
-  if (fileInput.value) {
-    fileInput.value.click();
-  }
-};
+  fileInput.value?.click();
+}
 
-// Handle file upload
 const handleFileUpload = (event: Event) => {
   const target = event.target as HTMLInputElement;
   if (!target.files || target.files.length === 0) return;
@@ -47,7 +33,6 @@ const handleFileUpload = (event: Event) => {
   processImageFile(file);
 };
 
-// Process image file
 const processImageFile = (file: File) => {
   isProcessing.value = true;
   errorMessage.value = "";
@@ -56,7 +41,6 @@ const processImageFile = (file: File) => {
   reader.onload = (e) => {
     const img = new Image();
     img.onload = () => {
-      // Create canvas to process image
       const canvas = document.createElement("canvas");
       const ctx = canvas.getContext("2d");
 
@@ -66,17 +50,11 @@ const processImageFile = (file: File) => {
         return;
       }
 
-      // Set canvas dimensions
       canvas.width = img.width;
       canvas.height = img.height;
-
-      // Draw image to canvas
       ctx.drawImage(img, 0, 0);
 
-      // Get image data
       const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-
-      // Use jsQR to recognize QR code
       const code = jsQR(imageData.data, imageData.width, imageData.height);
 
       if (code) {
@@ -104,19 +82,17 @@ const processImageFile = (file: File) => {
   reader.readAsDataURL(file);
 };
 
-// Scan current tab for QR code
 const scanCurrentTab = async () => {
   isProcessing.value = true;
   errorMessage.value = "";
 
   try {
-    // Send message to background script to capture visible tab
     const response = await chrome.runtime.sendMessage({
       action: "scanCurrentTab",
     });
     const base64Image = response.data;
+
     if (base64Image) {
-      // BASE64 TO FILE
       const res = await fetch(base64Image);
       const blob = await res.blob();
       const file = new File([blob], "screenshot.png", { type: blob.type });
@@ -151,18 +127,15 @@ const handleGoogleMigration = (data: string) => {
   });
 };
 
-// Handle QR code result
 const handleQrCodeResult = (data: string) => {
   try {
-    // Parse TOTP URI format: otpauth://totp/Example:alice@google.com?secret=JBSWY3DPEHPK3PXP&issuer=Example
     const url = new URL(data);
     if (url.protocol === "otpauth:" && url.hostname === "totp") {
-      const issuerAndAccount = url.pathname.substring(1); // Remove leading "/"
+      const issuerAndAccount = url.pathname.substring(1);
       const params = new URLSearchParams(url.search);
       const secret = params.get("secret");
 
       if (secret) {
-        // Parse account name and issuer
         let issuer = "";
         let account = issuerAndAccount;
 
@@ -170,12 +143,10 @@ const handleQrCodeResult = (data: string) => {
           [issuer, account] = issuerAndAccount.split(":", 2);
         }
 
-        // If issuer is in URL params, use it
         if (params.get("issuer")) {
           issuer = params.get("issuer") || "";
         }
 
-        // Combine issuer and account name
         const name = issuer ? `${issuer}: ${account}` : account;
 
         emit("scan-success", {
@@ -185,8 +156,8 @@ const handleQrCodeResult = (data: string) => {
         return;
       }
     }
+
     if (url.protocol === "otpauth-migration:") {
-      // is google migration
       handleGoogleMigration(url.searchParams.get("data") || "");
       return;
     }
@@ -198,85 +169,79 @@ const handleQrCodeResult = (data: string) => {
   }
 };
 
-// Close scanner
 const closeScanner = () => {
   emit("close");
 };
 </script>
 
 <template>
-  <div
-    :class="['fixed inset-0 flex items-center justify-center z-50 p-4', { 'bg-gray-900 bg-opacity-75': isDarkMode, 'bg-gray-500 bg-opacity-75': !isDarkMode }]"
-  >
-    <div :class="['p-6 rounded-lg w-full max-w-sm shadow-embossed-strong', backgroundColor, textColor]">
-      <h2 :class="['text-xl font-bold mb-4', textColor]">Scan QR Code</h2>
+  <Teleport to="body">
+    <div class="modal-backdrop">
+      <div class="modal-card">
+        <h2 class="modal-title">Scan QR Code</h2>
+        <p class="modal-copy">
+          Upload a QR image or capture the active page to import TOTP accounts.
+        </p>
 
-      <div class="mb-4">
-        <div
-          @click="triggerFileSelect"
-          :class="['border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-colors mb-3 shadow-embossed-light', borderColor, hoverBorderColor]"
-        >
-          <div class="flex flex-col items-center justify-center">
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              class="h-10 w-10 mb-2"
-              :class="infoTextColor"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
-              />
-            </svg>
-            <p :class="['mb-1', infoTextColor]">Click to select QR code image</p>
-            <p :class="['text-sm', { 'text-gray-500': !isDarkMode, 'text-gray-400': isDarkMode }]">Supports JPG, PNG, GIF formats</p>
-          </div>
+        <div class="form-stack">
+          <button class="dropzone" @click="triggerFileSelect">
+            <span class="dropzone__icon">
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke-width="1.5"
+                stroke="currentColor"
+                class="size-6"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  d="m2.25 15.75 5.159-5.159a2.25 2.25 0 0 1 3.182 0l1.409 1.409m0 0 2.409-2.409a2.25 2.25 0 0 1 3.182 0L21.75 14.25m-9.75-2.25h.008v.008H12V12ZM3.75 19.5h16.5a1.5 1.5 0 0 0 1.5-1.5V6a1.5 1.5 0 0 0-1.5-1.5H3.75A1.5 1.5 0 0 0 2.25 6v12a1.5 1.5 0 0 0 1.5 1.5Z"
+                />
+              </svg>
+            </span>
+            <p class="dropzone__title">Select QR Code Image</p>
+            <p class="dropzone__copy">
+              Supports JPG, PNG, and GIF files with visible TOTP QR codes.
+            </p>
+          </button>
+
+          <input
+            ref="fileInput"
+            type="file"
+            accept="image/*"
+            class="hidden"
+            @change="handleFileUpload"
+          />
         </div>
 
-        <input
-          ref="fileInput"
-          type="file"
-          accept="image/*"
-          class="hidden"
-          @change="handleFileUpload"
-        />
-      </div>
+        <div v-if="isProcessing" class="feedback-text">
+          <span class="spinner"></span>
+          <div class="mt-3">Processing image...</div>
+        </div>
 
-      <div v-if="isProcessing" class="text-center mb-4">
-        <div
-          class="inline-block animate-spin rounded-full h-6 w-6 border-b-2"
-          :class="processingSpinnerColor"
-        ></div>
-        <p :class="['mt-2', infoTextColor]">Processing...</p>
-      </div>
+        <div v-if="errorMessage" class="feedback-text feedback-text--error">
+          {{ errorMessage }}
+        </div>
 
-      <div v-if="errorMessage" :class="['text-center mb-4', errorMessageColor]">
-        {{ errorMessage }}
-      </div>
+        <div v-if="!errorMessage && !isProcessing" class="feedback-text">
+          Select an image file or scan the current page for a TOTP QR code.
+        </div>
 
-      <div :class="['text-sm text-center mb-4', infoTextColor]">
-        Select an image file or scan the current page for a TOTP QR code
-      </div>
-
-      <div class="flex justify-end gap-2">
-        <button
-          @click="scanCurrentTab"
-          :disabled="isProcessing"
-          class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors flex-1 disabled:opacity-50 shadow-embossed"
-        >
-          Scan Page
-        </button>
-        <button
-          @click="closeScanner"
-          :class="['px-4 py-2 rounded-md focus:outline-none focus:ring-2 transition-colors flex-1 shadow-embossed-light', cancelButtonColor]"
-        >
-          Cancel
-        </button>
+        <div class="form-actions">
+          <button
+            class="pill-button pill-button--primary"
+            :disabled="isProcessing"
+            @click="scanCurrentTab"
+          >
+            Scan Page
+          </button>
+          <button class="pill-button pill-button--secondary" @click="closeScanner">
+            Cancel
+          </button>
+        </div>
       </div>
     </div>
-  </div>
+  </Teleport>
 </template>
