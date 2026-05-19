@@ -314,7 +314,8 @@ html.dark .chrome-panel::before {
   opacity: 0.55;
 }
 
-.summary-card__choice.is-copied {
+.summary-card__choice.is-copied,
+.summary-card__choice.is-copied:hover:not(:disabled) {
   border-color: rgba(0, 113, 227, 0.32);
   background: rgba(0, 113, 227, 0.08);
 }
