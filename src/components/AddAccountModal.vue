@@ -29,7 +29,7 @@ watch(
   () => [props.initialName, props.initialSecret, props.mode],
   () => {
     accountName.value = props.initialName;
-    accountSecret.value = props.initialSecret;
+    accountSecret.value = props.mode === "edit" ? "" : props.initialSecret;
   },
   { immediate: true },
 );
@@ -39,23 +39,28 @@ const modalTitle = computed(() =>
 );
 const modalCopy = computed(() =>
   props.mode === "edit"
-    ? "Update the account label and Base32 secret. Changes are saved immediately after confirmation."
+    ? "Update the account label. Enter a new Base32 secret only if you want to replace the current one."
     : "Enter the account label and Base32 secret exactly as provided by your service.",
 );
 const submitLabel = computed(() =>
   props.mode === "edit" ? "Save Changes" : "Add Account",
+);
+const secretPlaceholder = computed(() =>
+  props.mode === "edit"
+    ? "New Secret Key (Base32, optional)"
+    : "Secret Key (Base32)",
 );
 
 const submitAccount = () => {
   const name = accountName.value.trim();
   const secret = accountSecret.value.trim();
 
-  if (!name || !secret) {
+  if (!name || (props.mode !== "edit" && !secret)) {
     alert("Name and Secret cannot be empty.");
     return;
   }
 
-  if (!validateBase32Secret(secret)) {
+  if (secret && !validateBase32Secret(secret)) {
     alert("Invalid secret key format. Please enter a valid Base32 encoded secret.");
     return;
   }
@@ -84,7 +89,7 @@ const closeModal = () => {
           <input
             v-model="accountSecret"
             class="field-input"
-            placeholder="Secret Key (Base32)"
+            :placeholder="secretPlaceholder"
           />
         </div>
 
