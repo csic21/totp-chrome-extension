@@ -4,6 +4,8 @@ import AddAccountModal from "../components/AddAccountModal.vue";
 import QrScanner from "../components/QrScanner.vue";
 import AddMenu from "../components/AddMenu.vue";
 import CircularProgress from "../components/CircularProgress.vue";
+import vaultLabelLight from "../assets/Vault_iOS_Label.svg";
+import vaultLabelDark from "../assets/Vault_iOS_Label_Dark.svg";
 import {
   generateAllTokens,
   validateBase32Secret,
@@ -389,11 +391,7 @@ onUnmounted(() => {
           <div class="hero-label">
             <img
               class="hero-label__logo"
-              :src="
-                isDarkMode
-                  ? '/Vault_iOS_Label_Dark.svg'
-                  : '/Vault_iOS_Label.svg'
-              "
+              :src="isDarkMode ? vaultLabelDark : vaultLabelLight"
               alt=""
             />
             TOTP Authenticator
