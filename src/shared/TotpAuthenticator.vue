@@ -47,6 +47,11 @@ const currentHostname = ref<string | undefined>();
 const isContentOverflowing = ref(false);
 type InfoPopoverKey = "hero" | "refresh";
 type ToastVariant = "success" | "error";
+type LegacyStoredAccounts = Record<
+  string,
+  { secret: string; activePath?: string }
+>;
+type StoredAccountsValue = TotpAccounts | LegacyStoredAccounts | undefined;
 
 const openInfoPopover = ref<InfoPopoverKey | null>(null);
 const heroInfoRef = ref<HTMLElement | null>(null);
@@ -118,25 +123,29 @@ const sorterAccounts = () => {
 };
 
 const getStorageAccounts = async () => {
-  const result = await chrome.storage.sync.get("totpAccounts");
-  let storedAccounts: TotpAccounts = result.totpAccounts;
+  const result = (await chrome.storage.sync.get("totpAccounts")) as {
+    totpAccounts?: StoredAccountsValue;
+  };
+  let storedAccounts = result.totpAccounts;
 
   if (storedAccounts && !Array.isArray(storedAccounts)) {
     console.log("Migrating data from object to array format...");
     storedAccounts = Object.entries(storedAccounts).map(
-      ([name, account]: [string, any]) => ({
+      ([name, account]) => ({
         name,
         secret: account.secret,
+        activePath: account.activePath,
       }),
     );
     await chrome.storage.sync.set({ totpAccounts: storedAccounts });
   }
 
-  accounts.value =
-    storedAccounts?.map((item, index) => ({
-      ...item,
-      originIndex: index + 1,
-    })) || [];
+  accounts.value = Array.isArray(storedAccounts)
+    ? storedAccounts.map((item, index) => ({
+        ...item,
+        originIndex: index + 1,
+      }))
+    : [];
 };
 
 const cloneAccounts = (items: TotpAccounts): TotpAccounts =>
@@ -187,7 +196,6 @@ const loadAccounts = async () => {
 
 const saveAccounts = async () => {
   try {
-    console.log("Saving to storage:", accounts.value);
     await chrome.storage.sync.set({
       totpAccounts: accounts.value
         .sort((a, b) => {

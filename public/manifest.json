@@ -6,6 +6,7 @@
   "permissions": [
     "storage",
     "sidePanel",
+    "contextMenus",
     "activeTab"
   ],
   "action": {
