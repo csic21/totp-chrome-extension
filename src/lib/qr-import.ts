@@ -1,5 +1,5 @@
 import base32Encode from "base32-encode";
-import { MigrationPayload } from "./google-migration";
+import { decodeGoogleMigrationPayload } from "./google-migration";
 
 export type ScanImportSource = "qr" | "migration";
 
@@ -9,28 +9,19 @@ export type ScannedAccount = {
 };
 
 export const parseGoogleMigrationPayload = (data: string): ScannedAccount[] => {
-  const buffer = Uint8Array.from(atob(data), (char) => char.charCodeAt(0));
-  const payload = MigrationPayload.deserializeBinary(buffer);
+  return decodeGoogleMigrationPayload(data).flatMap((item) => {
+    if (!item.secret || item.secret.length === 0) {
+      return [];
+    }
 
-  return (
-    payload
-      .toObject()
-      .otp_parameters?.flatMap((item) => {
-        if (!item.secret || item.secret.length === 0) {
-          return [];
-        }
+    const secret = base32Encode(item.secret, "RFC4648", {
+      padding: false,
+    });
+    const accountName = item.name || "Imported account";
+    const name = item.issuer ? `${item.issuer}: ${accountName}` : accountName;
 
-        const secret = base32Encode(item.secret as Uint8Array, "RFC4648", {
-          padding: false,
-        });
-        const accountName = item.name || "Imported account";
-        const name = item.issuer
-          ? `${item.issuer}: ${accountName}`
-          : accountName;
-
-        return [{ name, secret }];
-      }) || []
-  );
+    return [{ name, secret }];
+  });
 };
 
 export const parseQrImportData = (

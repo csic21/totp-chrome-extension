@@ -4,7 +4,96 @@ import {
   parseGoogleMigrationPayload,
   parseQrImportData,
 } from "./qr-import";
-import { MigrationPayload } from "./google-migration";
+
+const WIRE_TYPE_VARINT = 0;
+const WIRE_TYPE_LENGTH_DELIMITED = 2;
+const GOOGLE_MIGRATION_FIXTURE =
+  "CicKBUhlbGxvEhFhbGljZUBleGFtcGxlLmNvbRoHRXhhbXBsZSABMAIKCwoFV29ybGQgATAC";
+const textEncoder = new TextEncoder();
+
+type TestOtpParameter = {
+  secret?: Uint8Array;
+  name?: string;
+  issuer?: string;
+  algorithm?: number;
+  digits?: number;
+  type?: number;
+  counter?: number;
+};
+
+const encodeVarint = (value: number | bigint): number[] => {
+  let nextValue = BigInt(value);
+  const bytes: number[] = [];
+
+  do {
+    let byte = Number(nextValue & 0x7fn);
+    nextValue >>= 7n;
+
+    if (nextValue > 0n) {
+      byte |= 0x80;
+    }
+
+    bytes.push(byte);
+  } while (nextValue > 0n);
+
+  return bytes;
+};
+
+const encodeTag = (fieldNumber: number, wireType: number) =>
+  encodeVarint((fieldNumber << 3) | wireType);
+
+const encodeLengthDelimitedField = (
+  fieldNumber: number,
+  value: Uint8Array,
+) => [
+  ...encodeTag(fieldNumber, WIRE_TYPE_LENGTH_DELIMITED),
+  ...encodeVarint(value.length),
+  ...value,
+];
+
+const encodeStringField = (fieldNumber: number, value: string) =>
+  encodeLengthDelimitedField(fieldNumber, textEncoder.encode(value));
+
+const encodeVarintField = (fieldNumber: number, value: number) => [
+  ...encodeTag(fieldNumber, WIRE_TYPE_VARINT),
+  ...encodeVarint(value),
+];
+
+const encodeOtpParameter = (parameter: TestOtpParameter) => {
+  const bytes: number[] = [];
+
+  if (parameter.secret) {
+    bytes.push(...encodeLengthDelimitedField(1, parameter.secret));
+  }
+  if (parameter.name !== undefined) {
+    bytes.push(...encodeStringField(2, parameter.name));
+  }
+  if (parameter.issuer !== undefined) {
+    bytes.push(...encodeStringField(3, parameter.issuer));
+  }
+  if (parameter.algorithm !== undefined) {
+    bytes.push(...encodeVarintField(4, parameter.algorithm));
+  }
+  if (parameter.digits !== undefined) {
+    bytes.push(...encodeVarintField(5, parameter.digits));
+  }
+  if (parameter.type !== undefined) {
+    bytes.push(...encodeVarintField(6, parameter.type));
+  }
+  if (parameter.counter !== undefined) {
+    bytes.push(...encodeVarintField(7, parameter.counter));
+  }
+
+  return new Uint8Array(bytes);
+};
+
+const encodeMigrationPayload = (parameters: TestOtpParameter[]) => {
+  const bytes = parameters.flatMap((parameter) =>
+    encodeLengthDelimitedField(1, encodeOtpParameter(parameter)),
+  );
+
+  return btoa(String.fromCharCode(...bytes));
+};
 
 describe("QR import helpers", () => {
   it("parses a standard otpauth TOTP URI", () => {
@@ -24,25 +113,9 @@ describe("QR import helpers", () => {
   });
 
   it("parses Google Authenticator migration exports into multiple accounts", () => {
-    const payload = new MigrationPayload({
-      otp_parameters: [
-        new MigrationPayload.OtpParameters({
-          secret: new Uint8Array([72, 101, 108, 108, 111]),
-          name: "alice@example.com",
-          issuer: "Example",
-          type: MigrationPayload.OtpType.OTP_TOTP,
-          algorithm: MigrationPayload.Algorithm.ALGO_SHA1,
-        }),
-        new MigrationPayload.OtpParameters({
-          secret: new Uint8Array([87, 111, 114, 108, 100]),
-          type: MigrationPayload.OtpType.OTP_TOTP,
-          algorithm: MigrationPayload.Algorithm.ALGO_SHA1,
-        }),
-      ],
-    });
-    const data = btoa(String.fromCharCode(...payload.serializeBinary()));
-
-    const result = parseQrImportData(`otpauth-migration://offline?data=${data}`);
+    const result = parseQrImportData(
+      `otpauth-migration://offline?data=${GOOGLE_MIGRATION_FIXTURE}`,
+    );
 
     expect(result).toEqual({
       accounts: [
@@ -60,18 +133,15 @@ describe("QR import helpers", () => {
   });
 
   it("returns all valid migration accounts and skips entries without secrets", () => {
-    const payload = new MigrationPayload({
-      otp_parameters: [
-        new MigrationPayload.OtpParameters({
-          name: "missing-secret",
-        }),
-        new MigrationPayload.OtpParameters({
-          secret: new Uint8Array([65, 66, 67]),
-          name: "abc",
-        }),
-      ],
-    });
-    const data = btoa(String.fromCharCode(...payload.serializeBinary()));
+    const data = encodeMigrationPayload([
+      {
+        name: "missing-secret",
+      },
+      {
+        secret: new Uint8Array([65, 66, 67]),
+        name: "abc",
+      },
+    ]);
 
     expect(parseGoogleMigrationPayload(data)).toEqual([
       {
