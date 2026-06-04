@@ -2,12 +2,226 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <link rel="icon" type="image/png" href="/icon-16.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <script src="/theme-init.js"></script>
+    <style>
+      :root {
+        color-scheme: light;
+        font-family:
+          "SF Pro Display", "SF Pro Text", "Helvetica Neue", Helvetica, Arial,
+          sans-serif;
+        --boot-bg: #f5f5f7;
+        --boot-bg-alt: #ffffff;
+        --boot-text: #1d1d1f;
+        --boot-panel-bg: rgba(255, 255, 255, 0.8);
+        --boot-panel-border: rgba(255, 255, 255, 0.72);
+        --boot-surface-bg: rgba(255, 255, 255, 0.94);
+        --boot-surface-hover: rgba(0, 0, 0, 0.04);
+        --boot-shadow-panel: 0 32px 80px rgba(0, 0, 0, 0.14);
+      }
+
+      html.dark {
+        color-scheme: dark;
+        --boot-bg: #000000;
+        --boot-bg-alt: #111111;
+        --boot-text: #ffffff;
+        --boot-panel-bg: rgba(24, 24, 28, 0.88);
+        --boot-panel-border: rgba(255, 255, 255, 0.08);
+        --boot-surface-bg: rgba(39, 39, 41, 0.96);
+        --boot-surface-hover: rgba(255, 255, 255, 0.06);
+        --boot-shadow-panel: 0 28px 80px rgba(0, 0, 0, 0.45);
+      }
+
+      html,
+      body,
+      #app {
+        margin: 0;
+        width: 380px;
+        min-width: 380px;
+        min-height: 540px;
+      }
+
+      body.popup-page {
+        overflow-x: hidden;
+        color: var(--boot-text);
+        background:
+          radial-gradient(
+            circle at top left,
+            rgba(0, 113, 227, 0.12),
+            transparent 28%
+          ),
+          radial-gradient(
+            circle at top right,
+            rgba(0, 0, 0, 0.08),
+            transparent 24%
+          ),
+          linear-gradient(
+            180deg,
+            var(--boot-bg-alt) 0%,
+            var(--boot-bg) 100%
+          );
+      }
+
+      html.dark body.popup-page {
+        background:
+          radial-gradient(
+            circle at top left,
+            rgba(41, 151, 255, 0.18),
+            transparent 24%
+          ),
+          radial-gradient(
+            circle at bottom right,
+            rgba(255, 255, 255, 0.08),
+            transparent 20%
+          ),
+          linear-gradient(180deg, #070708 0%, var(--boot-bg) 100%);
+      }
+
+      .boot-shell {
+        box-sizing: border-box;
+        width: 100%;
+        min-height: 540px;
+        padding: 10px;
+      }
+
+      .boot-panel {
+        box-sizing: border-box;
+        min-height: 520px;
+        padding: 18px;
+        overflow: hidden;
+        border: 1px solid var(--boot-panel-border);
+        border-radius: 30px;
+        background: var(--boot-panel-bg);
+        box-shadow: var(--boot-shadow-panel);
+        backdrop-filter: saturate(180%) blur(22px);
+      }
+
+      .boot-topbar,
+      .boot-actions,
+      .boot-heading {
+        display: flex;
+        align-items: center;
+      }
+
+      .boot-topbar {
+        justify-content: space-between;
+        gap: 14px;
+      }
+
+      .boot-heading {
+        min-width: 0;
+        gap: 10px;
+      }
+
+      .boot-mark,
+      .boot-pill,
+      .boot-icon,
+      .boot-line,
+      .boot-token {
+        background: var(--boot-surface-hover);
+      }
+
+      .boot-mark {
+        width: 32px;
+        height: 32px;
+        border-radius: 8px;
+      }
+
+      .boot-pill {
+        width: 150px;
+        height: 16px;
+        border-radius: 999px;
+      }
+
+      .boot-actions {
+        gap: 8px;
+      }
+
+      .boot-icon {
+        width: 30px;
+        height: 30px;
+        border-radius: 999px;
+      }
+
+      .boot-card {
+        margin-top: 18px;
+        padding: 16px;
+        border-radius: 18px;
+        background: var(--boot-surface-bg);
+      }
+
+      .boot-line {
+        height: 12px;
+        border-radius: 999px;
+      }
+
+      .boot-line + .boot-line {
+        margin-top: 12px;
+      }
+
+      .boot-line--wide {
+        width: 78%;
+      }
+
+      .boot-line--short {
+        width: 48%;
+      }
+
+      .boot-token {
+        height: 58px;
+        margin-top: 14px;
+        border-radius: 16px;
+      }
+
+      @media (prefers-reduced-motion: no-preference) {
+        .boot-mark,
+        .boot-pill,
+        .boot-icon,
+        .boot-line,
+        .boot-token {
+          animation: boot-pulse 1.35s ease-in-out infinite;
+        }
+      }
+
+      @keyframes boot-pulse {
+        0%,
+        100% {
+          opacity: 0.5;
+        }
+
+        50% {
+          opacity: 1;
+        }
+      }
+    </style>
     <title>TOTP Authenticator</title>
   </head>
   <body class="popup-page">
-    <div id="app"></div>
+    <div id="app">
+      <div class="boot-shell" aria-hidden="true">
+        <div class="boot-panel">
+          <div class="boot-topbar">
+            <div class="boot-heading">
+              <div class="boot-mark"></div>
+              <div class="boot-pill"></div>
+            </div>
+            <div class="boot-actions">
+              <div class="boot-icon"></div>
+              <div class="boot-icon"></div>
+              <div class="boot-icon"></div>
+            </div>
+          </div>
+          <div class="boot-card">
+            <div class="boot-line boot-line--wide"></div>
+            <div class="boot-line boot-line--short"></div>
+            <div class="boot-token"></div>
+            <div class="boot-token"></div>
+            <div class="boot-token"></div>
+          </div>
+        </div>
+      </div>
+    </div>
     <script type="module" src="/src/popup/main.ts"></script>
   </body>
 </html>
