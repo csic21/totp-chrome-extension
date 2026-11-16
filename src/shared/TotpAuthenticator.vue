@@ -39,6 +39,10 @@ import {
   toggleTheme,
   toggleAutoMode,
 } from "../composables/useTheme";
+import type { FillOtpResult } from "../lib/otp-field";
+import { isFillableTabUrl } from "../lib/fill-otp-tab";
+import { getUniquePinnedHosts } from "../lib/pinned-hosts";
+import { requestMissingPinnedHostPermissions } from "../lib/pinned-host-permissions";
 
 const QrScanner = defineAsyncComponent(
   () => import("../components/QrScanner.vue"),
@@ -52,6 +56,7 @@ const showQRCode = ref(false);
 const selectedAccountForQR = ref<{ name: string; secret: string } | null>(null);
 const qrCodeDataUrl = ref("");
 const copiedIndex = ref<number | null>(null);
+const filledIndex = ref<number | null>(null);
 const editingIndex = ref<number | null>(null);
 const pendingDeleteIndex = ref<number | null>(null);
 const currentHostname = ref<string | undefined>();
@@ -76,6 +81,7 @@ const pendingImportAccounts = ref<TotpBackupAccount[] | null>(null);
 
 let tokenTimerId: number | undefined;
 let copiedResetTimeoutId: number | undefined;
+let filledResetTimeoutId: number | undefined;
 let toastTimeoutId: number | undefined;
 let toastId = 0;
 let tokenTimeStep: number | undefined;
@@ -434,12 +440,31 @@ const startEditing = (index: number) => {
 };
 
 const focusHostName = async (index: number) => {
+  if (!currentHostname.value) {
+    showToast("No active domain detected.", "error");
+    return;
+  }
+
   const nextAccounts = cloneAccounts(accounts.value);
   nextAccounts[index].activePath = currentHostname.value;
   const saved = await persistAccounts(nextAccounts);
   if (!saved) return;
 
-  showToast("Pinned to the current domain");
+  const granted = await requestMissingPinnedHostPermissions([
+    currentHostname.value,
+  ]);
+  await chrome.runtime.sendMessage({ action: "syncPinnedScripts" });
+
+  if (granted) {
+    showToast("Pinned to this site. Focus the code field to fill automatically.");
+    return;
+  }
+
+  showToast(
+    "Pinned for sorting only. Allow site access next time to auto-fill on focus.",
+    "error",
+    4200,
+  );
 };
 
 const unFocusHostName = async (index: number) => {
@@ -571,11 +596,86 @@ const confirmImport = async (mode: ImportMode) => {
   if (!saved) return;
 
   pendingImportAccounts.value = null;
-  showToast(formatBackupImportMessage(mode, result), "success", 4200);
+
+  const pinnedHosts = getUniquePinnedHosts(result.accounts);
+  let message = formatBackupImportMessage(mode, result);
+  let toastDuration = 4200;
+
+  if (pinnedHosts.length > 0) {
+    const granted = await requestMissingPinnedHostPermissions(pinnedHosts);
+    await chrome.runtime.sendMessage({ action: "syncPinnedScripts" });
+    message += granted
+      ? " Auto-fill is enabled for pinned sites."
+      : " Allow site access later to auto-fill on pinned sites.";
+    toastDuration = granted ? 4200 : 5200;
+  }
+
+  showToast(message, "success", toastDuration);
 };
 
-const copyCurrentDomainAccount = (index: number, token: string) => {
-  copyToClipboard(index, token);
+const formatFillFailure = (result?: FillOtpResult) => {
+  if (result?.ok === false && result.reason === "no_input") {
+    return "No verification field found. Click the input on the page, then try again.";
+  }
+
+  return "Could not fill the verification field on this page.";
+};
+
+const resetFilledIndicator = (index: number) => {
+  filledIndex.value = index;
+
+  if (filledResetTimeoutId) {
+    clearTimeout(filledResetTimeoutId);
+  }
+
+  filledResetTimeoutId = window.setTimeout(() => {
+    if (filledIndex.value === index) {
+      filledIndex.value = null;
+    }
+    filledResetTimeoutId = undefined;
+  }, 2200);
+};
+
+const fillToActiveTab = async (index: number, token: string) => {
+  if (!token || token === "Error") return;
+
+  try {
+    const [activeTab] = await chrome.tabs.query({
+      active: true,
+      currentWindow: true,
+    });
+
+    if (!activeTab?.id || !isFillableTabUrl(activeTab.url)) {
+      showToast("This page cannot be filled automatically.", "error");
+      return;
+    }
+
+    const response = (await chrome.runtime.sendMessage({
+      action: "fillOtp",
+      token,
+      tabId: activeTab.id,
+    })) as {
+      success?: boolean;
+      result?: FillOtpResult;
+      error?: string;
+    };
+
+    if (!response?.success) {
+      showToast(response?.error ?? formatFillFailure(), "error");
+      return;
+    }
+
+    if (response.result?.ok) {
+      resetFilledIndicator(index);
+      showToast("Code filled on the page.");
+      return;
+    }
+
+    showToast(formatFillFailure(response.result), "error");
+  } catch (error) {
+    console.error("Failed to fill OTP:", error);
+    showToast("Could not fill the active tab.", "error");
+  }
 };
 
 const generateQRCode = async (name: string, secret: string) => {
@@ -605,8 +705,18 @@ const closeQRCode = () => {
   qrCodeDataUrl.value = "";
 };
 
+const bootstrapPinnedAutoFill = async () => {
+  const hosts = getUniquePinnedHosts(accounts.value);
+  if (hosts.length === 0) {
+    return;
+  }
+
+  await requestMissingPinnedHostPermissions(hosts);
+  await chrome.runtime.sendMessage({ action: "syncPinnedScripts" });
+};
+
 onMounted(() => {
-  loadAccounts();
+  void loadAccounts().then(() => bootstrapPinnedAutoFill());
   scheduleTokenTimer();
   document.addEventListener("click", handleClickOutside);
 
@@ -622,6 +732,9 @@ onUnmounted(() => {
   }
   if (copiedResetTimeoutId) {
     clearTimeout(copiedResetTimeoutId);
+  }
+  if (filledResetTimeoutId) {
+    clearTimeout(filledResetTimeoutId);
   }
   if (toastTimeoutId) {
     clearTimeout(toastTimeoutId);
@@ -777,22 +890,31 @@ onUnmounted(() => {
                 d="M15.75 17.25v3.375c0 .621-.504 1.125-1.125 1.125h-9.75a1.125 1.125 0 0 1-1.125-1.125V7.875c0-.621.504-1.125 1.125-1.125H6.75a9.06 9.06 0 0 1 1.5.124m7.5 10.376h3.375c.621 0 1.125-.504 1.125-1.125V11.25c0-4.46-3.243-8.161-7.5-8.876a9.06 9.06 0 0 0-1.5-.124H9.375c-.621 0-1.125.504-1.125 1.125v3.5m7.5 10.375H9.375a1.125 1.125 0 0 1-1.125-1.125v-9.25"
               />
             </svg>
-            Tap an account below to copy the current code.
+            Tap an account below to fill the current code on the page.
           </div>
           <div class="summary-card__choices">
             <button
               v-for="item in currentDomainAccounts"
               :key="item.index + item.account.secret"
               class="summary-card__choice"
-              :class="{ 'is-copied': copiedIndex === item.index }"
+              :class="{
+                'is-filled': filledIndex === item.index,
+                'is-copied': copiedIndex === item.index,
+              }"
               :disabled="!item.token || item.token === 'Error'"
-              @click="copyCurrentDomainAccount(item.index, item.token || '')"
+              @click="fillToActiveTab(item.index, item.token || '')"
             >
               <span class="summary-card__choice-name">
                 {{ item.account.name }}
               </span>
               <span class="summary-card__choice-token">
-                {{ copiedIndex === item.index ? "Copied" : item.token || "......" }}
+                {{
+                  filledIndex === item.index
+                    ? "Filled"
+                    : copiedIndex === item.index
+                      ? "Copied"
+                      : item.token || "......"
+                }}
               </span>
             </button>
           </div>
@@ -872,31 +994,59 @@ onUnmounted(() => {
               </div>
             </div>
 
-            <button
-              class="icon-button account-card__copy-button"
-              :disabled="
-                !currentTokens[index]?.token ||
-                currentTokens[index]?.token === 'Error'
-              "
-              title="Copy to clipboard"
-              @click="copyToClipboard(index, currentTokens[index]?.token)"
-            >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke-width="1.5"
-                stroke="currentColor"
-                class="size-5"
+            <div class="account-card__quick-actions">
+              <button
+                class="icon-button account-card__fill-button"
+                :class="{ 'is-active': filledIndex === index }"
+                :disabled="
+                  !currentTokens[index]?.token ||
+                  currentTokens[index]?.token === 'Error'
+                "
+                title="Fill on page"
+                @click="fillToActiveTab(index, currentTokens[index]?.token || '')"
               >
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  d="M15.75 17.25v3.375c0 .621-.504 1.125-1.125 1.125h-9.75a1.125 1.125 0 0 1-1.125-1.125V7.875c0-.621.504-1.125 1.125-1.125H6.75a9.06 9.06 0 0 1 1.5.124m7.5 10.376h3.375c.621 0 1.125-.504 1.125-1.125V11.25c0-4.46-3.243-8.161-7.5-8.876a9.06 9.06 0 0 0-1.5-.124H9.375c-.621 0-1.125.504-1.125 1.125v3.5m7.5 10.375H9.375a1.125 1.125 0 0 1-1.125-1.125v-9.25m12 6.625v-1.875a3.375 3.375 0 0 0-3.375-3.375h-1.5a1.125 1.125 0 0 1-1.125-1.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H9.75"
-                />
-              </svg>
-              <span v-if="copiedIndex === index" class="tooltip">Copied</span>
-            </button>
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke-width="1.5"
+                  stroke="currentColor"
+                  class="size-5"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L6.832 19.82a4.5 4.5 0 01-1.897 1.13l-2.685.8.8-2.685a4.5 4.5 0 011.13-1.897L16.863 4.487zm0 0L19.5 7.125"
+                  />
+                </svg>
+                <span v-if="filledIndex === index" class="tooltip">Filled</span>
+              </button>
+              <button
+                class="icon-button account-card__copy-button"
+                :disabled="
+                  !currentTokens[index]?.token ||
+                  currentTokens[index]?.token === 'Error'
+                "
+                title="Copy to clipboard"
+                @click="copyToClipboard(index, currentTokens[index]?.token)"
+              >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke-width="1.5"
+                  stroke="currentColor"
+                  class="size-5"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    d="M15.75 17.25v3.375c0 .621-.504 1.125-1.125 1.125h-9.75a1.125 1.125 0 0 1-1.125-1.125V7.875c0-.621.504-1.125 1.125-1.125H6.75a9.06 9.06 0 0 1 1.5.124m7.5 10.376h3.375c.621 0 1.125-.504 1.125-1.125V11.25c0-4.46-3.243-8.161-7.5-8.876a9.06 9.06 0 0 0-1.5-.124H9.375c-.621 0-1.125.504-1.125 1.125v3.5m7.5 10.375H9.375a1.125 1.125 0 0 1-1.125-1.125v-9.25m12 6.625v-1.875a3.375 3.375 0 0 0-3.375-3.375h-1.5a1.125 1.125 0 0 1-1.125-1.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H9.75"
+                  />
+                </svg>
+                <span v-if="copiedIndex === index" class="tooltip">Copied</span>
+              </button>
+            </div>
           </div>
 
           <div class="account-card__actions">
