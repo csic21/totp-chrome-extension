@@ -5,6 +5,7 @@ const entryName = process.env.CONTENT_ENTRY ?? "fill-otp";
 const entryPath = resolve(__dirname, `src/content/${entryName}.ts`);
 
 export default defineConfig({
+  publicDir: false,
   build: {
     outDir: "dist/content",
     emptyOutDir: false,
