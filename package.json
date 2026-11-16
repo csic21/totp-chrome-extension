@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vue-tsc && vite build",
+    "build": "vue-tsc && vite build && CONTENT_ENTRY=fill-otp vite build --config vite.content.config.ts && CONTENT_ENTRY=focus-fill-otp vite build --config vite.content.config.ts",
     "preview": "vite preview",
     "test": "vitest",
     "test:ui": "vitest --ui"

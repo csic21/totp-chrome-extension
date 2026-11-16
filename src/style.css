@@ -385,7 +385,9 @@ html.dark .summary-card__hint {
 }
 
 .summary-card__choice.is-copied,
-.summary-card__choice.is-copied:hover:not(:disabled) {
+.summary-card__choice.is-copied:hover:not(:disabled),
+.summary-card__choice.is-filled,
+.summary-card__choice.is-filled:hover:not(:disabled) {
   border-color: rgba(0, 113, 227, 0.32);
   background: rgba(0, 113, 227, 0.08);
 }
@@ -704,9 +706,21 @@ html.dark .pill-button--primary:hover:not(:disabled) {
   min-width: 0;
 }
 
-.account-card__copy-button {
+.account-card__quick-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   flex: 0 0 auto;
   align-self: flex-start;
+}
+
+.account-card__fill-button.is-active {
+  border-color: rgba(0, 113, 227, 0.32);
+  background: rgba(0, 113, 227, 0.08);
+}
+
+.account-card__copy-button {
+  flex: 0 0 auto;
 }
 
 .token-display {
