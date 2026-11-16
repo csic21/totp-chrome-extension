@@ -828,6 +828,24 @@ html.dark .pill-button--primary:hover:not(:disabled) {
   background: var(--surface-hover);
 }
 
+.menu-divider {
+  height: 1px;
+  margin: 6px 8px;
+  background: var(--surface-border);
+}
+
+.backup-file-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 .modal-backdrop {
   position: fixed;
   inset: 0;

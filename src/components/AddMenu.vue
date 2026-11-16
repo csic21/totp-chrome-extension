@@ -7,6 +7,8 @@ const root = ref<HTMLElement | null>(null);
 const emit = defineEmits<{
   (e: "add-account"): void;
   (e: "scan-qr"): void;
+  (e: "export-backup"): void;
+  (e: "import-backup"): void;
 }>();
 
 defineProps({
@@ -28,6 +30,16 @@ const addAccount = () => {
 const scanQrCode = () => {
   isOpen.value = false;
   emit("scan-qr");
+};
+
+const exportBackup = () => {
+  isOpen.value = false;
+  emit("export-backup");
+};
+
+const importBackup = () => {
+  isOpen.value = false;
+  emit("import-backup");
 };
 
 const handleClickOutside = (event: MouseEvent) => {
@@ -109,6 +121,41 @@ onUnmounted(() => {
           />
         </svg>
         Scan QR Code
+      </button>
+      <div class="menu-divider"></div>
+      <button class="menu-item" @click="exportBackup">
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke-width="1.5"
+          stroke="currentColor"
+          class="size-4"
+        >
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3"
+          />
+        </svg>
+        Export Backup
+      </button>
+      <button class="menu-item" @click="importBackup">
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke-width="1.5"
+          stroke="currentColor"
+          class="size-4"
+        >
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5m-13.5-9L12 3m0 0 4.5 4.5M12 3v13.5"
+          />
+        </svg>
+        Import Backup
       </button>
     </div>
   </div>
