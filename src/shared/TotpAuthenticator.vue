@@ -23,6 +23,17 @@ import {
 } from "../lib/totp";
 import type { ScannedAccount, ScanImportSource } from "../lib/qr-import";
 import {
+  AccountBackupError,
+  applyBackupImport,
+  buildBackupFilename,
+  createBackupFile,
+  formatBackupExportMessage,
+  formatBackupImportMessage,
+  readBackupText,
+  type ImportMode,
+  type TotpBackupAccount,
+} from "../lib/account-backup";
+import {
   isDarkMode,
   isAutoMode,
   toggleTheme,
@@ -59,6 +70,9 @@ const refreshInfoRef = ref<HTMLElement | null>(null);
 const toast = ref<{ id: number; message: string; variant: ToastVariant } | null>(
   null,
 );
+const importInput = ref<HTMLInputElement | null>(null);
+const isExportConfirmOpen = ref(false);
+const pendingImportAccounts = ref<TotpBackupAccount[] | null>(null);
 
 let tokenTimerId: number | undefined;
 let copiedResetTimeoutId: number | undefined;
@@ -89,6 +103,24 @@ const pendingDeleteAccount = computed(() =>
     ? accounts.value[pendingDeleteIndex.value] || null
     : null,
 );
+const exportPinCount = computed(
+  () => accounts.value.filter((account) => account.activePath).length,
+);
+const pendingImportPins = computed(() => [
+  ...new Set(
+    (pendingImportAccounts.value ?? [])
+      .map((account) => account.activePath)
+      .filter((activePath): activePath is string => Boolean(activePath)),
+  ),
+]);
+const pendingImportPinsLabel = computed(() => {
+  const pins = pendingImportPins.value;
+  if (pins.length <= 3) {
+    return pins.join(", ");
+  }
+
+  return `${pins.slice(0, 3).join(", ")} +${pins.length - 3}`;
+});
 
 const getCurrentTabHostname = async (): Promise<string | undefined> => {
   try {
@@ -151,7 +183,11 @@ const getStorageAccounts = async () => {
 const cloneAccounts = (items: TotpAccounts): TotpAccounts =>
   items.map((account) => ({ ...account }));
 
-const showToast = (message: string, variant: ToastVariant = "success") => {
+const showToast = (
+  message: string,
+  variant: ToastVariant = "success",
+  duration = 2600,
+) => {
   if (toastTimeoutId) {
     clearTimeout(toastTimeoutId);
   }
@@ -165,7 +201,7 @@ const showToast = (message: string, variant: ToastVariant = "success") => {
   toastTimeoutId = window.setTimeout(() => {
     toast.value = null;
     toastTimeoutId = undefined;
-  }, 2600);
+  }, duration);
 };
 
 const formatImportToastMessage = (
@@ -444,6 +480,100 @@ const openQrScanner = () => {
   isQrScannerOpen.value = true;
 };
 
+const readFileAsText = (file: File) =>
+  new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+
+    reader.onload = () => {
+      if (typeof reader.result === "string") {
+        resolve(reader.result);
+        return;
+      }
+
+      reject(new Error("Unable to read that file."));
+    };
+    reader.onerror = () => {
+      reject(reader.error ?? new Error("Unable to read that file."));
+    };
+    reader.readAsText(file);
+  });
+
+const requestExport = () => {
+  if (accounts.value.length === 0) {
+    showToast("No accounts to export.", "error");
+    return;
+  }
+
+  isExportConfirmOpen.value = true;
+};
+
+const cancelExport = () => {
+  isExportConfirmOpen.value = false;
+};
+
+const confirmExport = () => {
+  const payload = createBackupFile(accounts.value);
+  const blob = new Blob([JSON.stringify(payload, null, 2)], {
+    type: "application/json",
+  });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = buildBackupFilename();
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+  isExportConfirmOpen.value = false;
+  showToast(formatBackupExportMessage(payload.accounts.length), "success", 4200);
+};
+
+const requestImport = () => {
+  if (!importInput.value) return;
+
+  importInput.value.value = "";
+  importInput.value.click();
+};
+
+const handleImportFile = async (event: Event) => {
+  const input = event.target as HTMLInputElement;
+  const file = input.files?.[0];
+  input.value = "";
+
+  if (!file) return;
+
+  try {
+    const text = await readFileAsText(file);
+    pendingImportAccounts.value = readBackupText(text);
+  } catch (error) {
+    pendingImportAccounts.value = null;
+    const message =
+      error instanceof AccountBackupError
+        ? error.message
+        : "Unable to read that file.";
+    showToast(message, "error", 4200);
+  }
+};
+
+const cancelImport = () => {
+  pendingImportAccounts.value = null;
+};
+
+const confirmImport = async (mode: ImportMode) => {
+  if (!pendingImportAccounts.value) return;
+
+  const result = applyBackupImport(
+    accounts.value,
+    pendingImportAccounts.value,
+    mode,
+  );
+  const saved = await persistAccounts(result.accounts);
+  if (!saved) return;
+
+  pendingImportAccounts.value = null;
+  showToast(formatBackupImportMessage(mode, result), "success", 4200);
+};
+
 const copyCurrentDomainAccount = (index: number, token: string) => {
   copyToClipboard(index, token);
 };
@@ -543,8 +673,8 @@ onUnmounted(() => {
           <div v-if="openInfoPopover === 'hero'" class="info-popover">
             <p class="info-popover__title">How it works</p>
             <p class="info-popover__copy">
-              Add secrets manually, scan QR codes, and pin accounts to the current
-              domain so the right codes stay at the top when you need to copy them.
+              Add secrets manually, scan QR codes, or import a JSON backup. Pin
+              accounts to the current domain so the right codes stay at the top.
             </p>
           </div>
         </div>
@@ -607,6 +737,17 @@ onUnmounted(() => {
           :is-dark-mode="isDarkMode"
           @add-account="isModalOpen = true"
           @scan-qr="openQrScanner"
+          @export-backup="requestExport"
+          @import-backup="requestImport"
+        />
+        <input
+          ref="importInput"
+          class="backup-file-input"
+          type="file"
+          accept=".json,application/json"
+          tabindex="-1"
+          aria-hidden="true"
+          @change="handleImportFile"
         />
       </div>
     </div>
@@ -705,8 +846,8 @@ onUnmounted(() => {
 
       <div class="account-list">
         <div v-if="accounts.length === 0" class="empty-state">
-          No accounts added yet. Use the Add button to create one or import from
-          a QR code.
+          No accounts added yet. Use Add to create one, scan a QR code, or import
+          a backup.
         </div>
 
         <div
@@ -930,6 +1071,85 @@ onUnmounted(() => {
               class="pill-button pill-button--secondary"
               @click="cancelDeleteAccount"
             >
+              Cancel
+            </button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
+
+    <Teleport to="body">
+      <div
+        v-if="isExportConfirmOpen"
+        class="modal-backdrop"
+        @click.self="cancelExport"
+      >
+        <div class="modal-card">
+          <h3 class="modal-title">Export Backup?</h3>
+          <p class="modal-copy">
+            This downloads {{ accounts.length }} account{{
+              accounts.length === 1 ? "" : "s"
+            }}
+            as JSON. The file contains plaintext secrets. Store it somewhere only
+            you can access.
+          </p>
+          <p v-if="exportPinCount > 0" class="modal-copy">
+            {{ exportPinCount }} domain pin{{ exportPinCount === 1 ? "" : "s" }}
+            will be included, so those accounts can still sort to the top after
+            import.
+          </p>
+          <div class="form-actions form-actions--stacked">
+            <button class="pill-button pill-button--primary" @click="confirmExport">
+              Export
+            </button>
+            <button class="pill-button pill-button--secondary" @click="cancelExport">
+              Cancel
+            </button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
+
+    <Teleport to="body">
+      <div
+        v-if="pendingImportAccounts"
+        class="modal-backdrop"
+        @click.self="cancelImport"
+      >
+        <div class="modal-card">
+          <h3 class="modal-title">Import Backup</h3>
+          <p class="modal-copy">
+            {{ pendingImportAccounts.length }} account{{
+              pendingImportAccounts.length === 1 ? "" : "s"
+            }}
+            {{ pendingImportAccounts.length === 1 ? "is" : "are" }} ready.
+            <template v-if="pendingImportPins.length > 0">
+              {{ pendingImportPins.length }} still
+              {{ pendingImportPins.length === 1 ? "includes" : "include" }} a
+              domain pin.
+            </template>
+          </p>
+          <p v-if="pendingImportPinsLabel" class="modal-copy">
+            Pins: {{ pendingImportPinsLabel }}
+          </p>
+          <p class="modal-copy">
+            Merge adds secrets that are not already saved. Replace removes your
+            current accounts first.
+          </p>
+          <div class="form-actions form-actions--stacked">
+            <button
+              class="pill-button pill-button--primary"
+              @click="confirmImport('merge')"
+            >
+              Merge
+            </button>
+            <button
+              class="pill-button pill-button--danger"
+              @click="confirmImport('replace')"
+            >
+              Replace current accounts
+            </button>
+            <button class="pill-button pill-button--secondary" @click="cancelImport">
               Cancel
             </button>
           </div>
