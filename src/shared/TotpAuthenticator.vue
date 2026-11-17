@@ -473,6 +473,12 @@ const copyToClipboard = async (index: number, text: string) => {
   } catch (err) {
     console.error("Failed to copy: ", err);
     alert("Failed to copy to clipboard.");
+    return;
+  }
+
+  const filled = await tryFillActiveTab(text);
+  if (filled) {
+    showToast("Code copied and filled on the page.");
   }
 };
 
@@ -576,6 +582,166 @@ const confirmImport = async (mode: ImportMode) => {
 
 const copyCurrentDomainAccount = (index: number, token: string) => {
   copyToClipboard(index, token);
+};
+
+const fillCodeInPage = (rawToken: string): boolean => {
+  try {
+    const token = rawToken.replace(/\s/g, "");
+    if (!/^\d{4,10}$/.test(token)) return false;
+
+  const isEditable = (
+    el: Element | null,
+  ): el is HTMLInputElement | HTMLTextAreaElement => {
+    if (el instanceof HTMLTextAreaElement) return !el.disabled && !el.readOnly;
+    if (!(el instanceof HTMLInputElement) || el.disabled || el.readOnly) {
+      return false;
+    }
+    const type = (el.type || "text").toLowerCase();
+    return ["text", "tel", "number", "password", "search", ""].includes(type);
+  };
+
+  const setNativeValue = (
+    el: HTMLInputElement | HTMLTextAreaElement,
+    value: string,
+  ) => {
+    const proto =
+      el instanceof HTMLTextAreaElement
+        ? HTMLTextAreaElement.prototype
+        : HTMLInputElement.prototype;
+    const setter = Object.getOwnPropertyDescriptor(proto, "value")?.set;
+    if (setter) {
+      setter.call(el, value);
+    } else {
+      el.value = value;
+    }
+    el.dispatchEvent(new Event("input", { bubbles: true }));
+    el.dispatchEvent(new Event("change", { bubbles: true }));
+  };
+
+  const getSplitBoxes = (): HTMLInputElement[] => {
+    const inputs = Array.from(document.querySelectorAll("input")).filter(
+      (el): el is HTMLInputElement =>
+        isEditable(el) && el.maxLength > 0 && el.maxLength <= 2,
+    );
+    for (const input of inputs) {
+      const container = input.closest("form, [role='group'], div");
+      if (!container) continue;
+      const group = Array.from(container.querySelectorAll("input")).filter(
+        (el): el is HTMLInputElement =>
+          isEditable(el) && el.maxLength > 0 && el.maxLength <= 2,
+      );
+      if (group.length >= token.length) return group;
+    }
+    return [];
+  };
+
+  const splitBoxes = getSplitBoxes();
+  const active = document.activeElement;
+  if (active && isEditable(active)) {
+    if (
+      active instanceof HTMLInputElement &&
+      active.maxLength > 0 &&
+      active.maxLength <= 2 &&
+      splitBoxes.length >= token.length
+    ) {
+      splitBoxes.slice(0, token.length).forEach((box, idx) => {
+        box.focus();
+        setNativeValue(box, token[idx]);
+      });
+      return true;
+    }
+    setNativeValue(active, token);
+    return true;
+  }
+
+  if (splitBoxes.length >= token.length) {
+    splitBoxes.slice(0, token.length).forEach((box, idx) => {
+      box.focus();
+      setNativeValue(box, token[idx]);
+    });
+    return true;
+  }
+
+  const otpHint =
+    /(?:otp|2fa|mfa|totp|verify|verification|one[-_]?time|auth(?:entication)?[-_]?code|security[-_]?code|passcode)/i;
+  const candidates = Array.from(
+    document.querySelectorAll("input, textarea"),
+  ).filter((el): el is HTMLInputElement | HTMLTextAreaElement => {
+    if (!isEditable(el)) return false;
+    if (el instanceof HTMLInputElement && el.autocomplete === "one-time-code") {
+      return true;
+    }
+    const attrs = [
+      el.getAttribute("name"),
+      el.getAttribute("id"),
+      el.getAttribute("aria-label"),
+      el.getAttribute("placeholder"),
+    ]
+      .filter(Boolean)
+      .join(" ");
+    if (otpHint.test(attrs)) return true;
+    return (
+      el instanceof HTMLInputElement && el.maxLength >= 4 && el.maxLength <= 10
+    );
+  });
+
+  const target =
+    candidates.find(
+      (el) =>
+        el instanceof HTMLInputElement && el.autocomplete === "one-time-code",
+    ) ?? candidates[0];
+  if (!target) return false;
+
+  target.focus();
+  setNativeValue(target, token);
+  return true;
+  } catch {
+    return false;
+  }
+};
+
+const tryFillActiveTab = async (token: string): Promise<boolean> => {
+  if (
+    !token ||
+    token === "Error" ||
+    typeof chrome === "undefined" ||
+    !chrome.tabs?.query ||
+    !chrome.scripting?.executeScript
+  ) {
+    return false;
+  }
+
+  try {
+    const [activeTab] = await chrome.tabs.query({
+      active: true,
+      currentWindow: true,
+    });
+    const url = activeTab?.url;
+    const isRestricted =
+      !url ||
+      [
+        "chrome://",
+        "chrome-extension://",
+        "edge://",
+        "about:",
+        "devtools://",
+      ].some((prefix) => url.startsWith(prefix));
+
+    if (!activeTab?.id || isRestricted) {
+      return false;
+    }
+
+    const results = await chrome.scripting.executeScript({
+      target: { tabId: activeTab.id, allFrames: true },
+      func: fillCodeInPage,
+      args: [token],
+    });
+
+    return results.some((entry) => entry.result === true);
+  } catch (error) {
+    console.error("Failed to fill OTP:", error);
+    return false;
+  }
 };
 
 const generateQRCode = async (name: string, secret: string) => {
@@ -777,7 +943,7 @@ onUnmounted(() => {
                 d="M15.75 17.25v3.375c0 .621-.504 1.125-1.125 1.125h-9.75a1.125 1.125 0 0 1-1.125-1.125V7.875c0-.621.504-1.125 1.125-1.125H6.75a9.06 9.06 0 0 1 1.5.124m7.5 10.376h3.375c.621 0 1.125-.504 1.125-1.125V11.25c0-4.46-3.243-8.161-7.5-8.876a9.06 9.06 0 0 0-1.5-.124H9.375c-.621 0-1.125.504-1.125 1.125v3.5m7.5 10.375H9.375a1.125 1.125 0 0 1-1.125-1.125v-9.25"
               />
             </svg>
-            Tap an account below to copy the current code.
+            Tap an account below to copy and auto-fill the current code.
           </div>
           <div class="summary-card__choices">
             <button
@@ -878,7 +1044,7 @@ onUnmounted(() => {
                 !currentTokens[index]?.token ||
                 currentTokens[index]?.token === 'Error'
               "
-              title="Copy to clipboard"
+              title="Copy and auto-fill"
               @click="copyToClipboard(index, currentTokens[index]?.token)"
             >
               <svg
