@@ -22,6 +22,7 @@ import {
   type TotpAccounts,
 } from "../lib/totp";
 import type { ScannedAccount, ScanImportSource } from "../lib/qr-import";
+import { fillCodeInPage } from "../lib/otp-autofill";
 import {
   AccountBackupError,
   applyBackupImport,
@@ -434,12 +435,23 @@ const startEditing = (index: number) => {
 };
 
 const focusHostName = async (index: number) => {
+  // Ask for site access while the click still counts as a user gesture.
+  const host = currentHostname.value;
+  const autofillGranted = host
+    ? chrome.permissions
+        .request({ origins: [`*://${host}/*`] })
+        .catch(() => false)
+    : Promise.resolve(false);
   const nextAccounts = cloneAccounts(accounts.value);
-  nextAccounts[index].activePath = currentHostname.value;
+  nextAccounts[index].activePath = host;
   const saved = await persistAccounts(nextAccounts);
   if (!saved) return;
 
-  showToast("Pinned to the current domain");
+  showToast(
+    (await autofillGranted)
+      ? "Pinned. Codes now fill when you focus the code field."
+      : "Pinned to the current domain",
+  );
 };
 
 const unFocusHostName = async (index: number) => {
@@ -584,160 +596,35 @@ const copyCurrentDomainAccount = (index: number, token: string) => {
   copyToClipboard(index, token);
 };
 
-const fillCodeInPage = (rawToken: string): boolean => {
-  try {
-    const token = rawToken.replace(/\s/g, "");
-    if (!/^\d{4,10}$/.test(token)) return false;
-
-  const isEditable = (
-    el: Element | null,
-  ): el is HTMLInputElement | HTMLTextAreaElement => {
-    if (el instanceof HTMLTextAreaElement) return !el.disabled && !el.readOnly;
-    if (!(el instanceof HTMLInputElement) || el.disabled || el.readOnly) {
-      return false;
-    }
-    const type = (el.type || "text").toLowerCase();
-    return ["text", "tel", "number", "password", "search", ""].includes(type);
-  };
-
-  const setNativeValue = (
-    el: HTMLInputElement | HTMLTextAreaElement,
-    value: string,
-  ) => {
-    const proto =
-      el instanceof HTMLTextAreaElement
-        ? HTMLTextAreaElement.prototype
-        : HTMLInputElement.prototype;
-    const setter = Object.getOwnPropertyDescriptor(proto, "value")?.set;
-    if (setter) {
-      setter.call(el, value);
-    } else {
-      el.value = value;
-    }
-    el.dispatchEvent(new Event("input", { bubbles: true }));
-    el.dispatchEvent(new Event("change", { bubbles: true }));
-  };
-
-  const getSplitBoxes = (): HTMLInputElement[] => {
-    const inputs = Array.from(document.querySelectorAll("input")).filter(
-      (el): el is HTMLInputElement =>
-        isEditable(el) && el.maxLength > 0 && el.maxLength <= 2,
-    );
-    for (const input of inputs) {
-      const container = input.closest("form, [role='group'], div");
-      if (!container) continue;
-      const group = Array.from(container.querySelectorAll("input")).filter(
-        (el): el is HTMLInputElement =>
-          isEditable(el) && el.maxLength > 0 && el.maxLength <= 2,
-      );
-      if (group.length >= token.length) return group;
-    }
-    return [];
-  };
-
-  const splitBoxes = getSplitBoxes();
-  const active = document.activeElement;
-  if (active && isEditable(active)) {
-    if (
-      active instanceof HTMLInputElement &&
-      active.maxLength > 0 &&
-      active.maxLength <= 2 &&
-      splitBoxes.length >= token.length
-    ) {
-      splitBoxes.slice(0, token.length).forEach((box, idx) => {
-        box.focus();
-        setNativeValue(box, token[idx]);
-      });
-      return true;
-    }
-    setNativeValue(active, token);
-    return true;
-  }
-
-  if (splitBoxes.length >= token.length) {
-    splitBoxes.slice(0, token.length).forEach((box, idx) => {
-      box.focus();
-      setNativeValue(box, token[idx]);
-    });
-    return true;
-  }
-
-  const otpHint =
-    /(?:otp|2fa|mfa|totp|verify|verification|one[-_]?time|auth(?:entication)?[-_]?code|security[-_]?code|passcode)/i;
-  const candidates = Array.from(
-    document.querySelectorAll("input, textarea"),
-  ).filter((el): el is HTMLInputElement | HTMLTextAreaElement => {
-    if (!isEditable(el)) return false;
-    if (el instanceof HTMLInputElement && el.autocomplete === "one-time-code") {
-      return true;
-    }
-    const attrs = [
-      el.getAttribute("name"),
-      el.getAttribute("id"),
-      el.getAttribute("aria-label"),
-      el.getAttribute("placeholder"),
-    ]
-      .filter(Boolean)
-      .join(" ");
-    if (otpHint.test(attrs)) return true;
-    return (
-      el instanceof HTMLInputElement && el.maxLength >= 4 && el.maxLength <= 10
-    );
-  });
-
-  const target =
-    candidates.find(
-      (el) =>
-        el instanceof HTMLInputElement && el.autocomplete === "one-time-code",
-    ) ?? candidates[0];
-  if (!target) return false;
-
-  target.focus();
-  setNativeValue(target, token);
-  return true;
-  } catch {
-    return false;
-  }
-};
+const RESTRICTED_URL_PREFIXES = [
+  "chrome://",
+  "chrome-extension://",
+  "edge://",
+  "about:",
+  "devtools://",
+];
 
 const tryFillActiveTab = async (token: string): Promise<boolean> => {
-  if (
-    !token ||
-    token === "Error" ||
-    typeof chrome === "undefined" ||
-    !chrome.tabs?.query ||
-    !chrome.scripting?.executeScript
-  ) {
-    return false;
-  }
+  if (typeof chrome === "undefined" || !chrome.scripting) return false;
 
   try {
-    const [activeTab] = await chrome.tabs.query({
-      active: true,
-      currentWindow: true,
-    });
-    const url = activeTab?.url;
-    const isRestricted =
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    const url = tab?.url;
+    if (
+      !tab?.id ||
       !url ||
-      [
-        "chrome://",
-        "chrome-extension://",
-        "edge://",
-        "about:",
-        "devtools://",
-      ].some((prefix) => url.startsWith(prefix));
-
-    if (!activeTab?.id || isRestricted) {
+      RESTRICTED_URL_PREFIXES.some((prefix) => url.startsWith(prefix))
+    ) {
       return false;
     }
 
     const results = await chrome.scripting.executeScript({
-      target: { tabId: activeTab.id, allFrames: true },
+      target: { tabId: tab.id, allFrames: true },
       func: fillCodeInPage,
       args: [token],
     });
 
-    return results.some((entry) => entry.result === true);
+    return results.some(({ result }) => result === true);
   } catch (error) {
     console.error("Failed to fill OTP:", error);
     return false;

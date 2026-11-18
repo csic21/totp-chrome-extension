@@ -9,6 +9,9 @@
     "activeTab",
     "scripting"
   ],
+  "optional_host_permissions": [
+    "*://*/*"
+  ],
   "action": {
     "default_popup": "index.html",
     "default_icon": {
